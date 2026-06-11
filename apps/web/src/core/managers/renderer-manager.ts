@@ -1,4 +1,6 @@
 import type { EditorCore } from "@/core";
+import type { SceneTracks } from "@/timeline";
+import { roundMediaTime, type MediaTime } from "@/wasm";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import type { ExportOptions, ExportResult } from "@/export";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
@@ -142,15 +144,18 @@ export class RendererManager {
 		options,
 		onProgress,
 		onCancel,
+		sceneTracks,
 	}: {
 		options: ExportOptions;
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
+		/** Render these tracks instead of the active scene's (e.g. nesting a scene). */
+		sceneTracks?: SceneTracks;
 	}): Promise<ExportResult> {
 		const { format, quality, fps, includeAudio } = options;
 
 		try {
-			const tracks = this.editor.scenes.getActiveScene().tracks;
+			const tracks = sceneTracks ?? this.editor.scenes.getActiveScene().tracks;
 			const mediaAssets = this.editor.media.getAssets();
 			const activeProject = this.editor.project.getActive();
 
@@ -158,7 +163,9 @@ export class RendererManager {
 				return { success: false, error: "No active project" };
 			}
 
-			const duration = this.editor.timeline.getTotalDuration();
+			const duration = sceneTracks
+				? computeTracksDuration({ tracks: sceneTracks })
+				: this.editor.timeline.getTotalDuration();
 			if (duration === 0) {
 				return { success: false, error: "Project is empty" };
 			}
@@ -249,4 +256,16 @@ export class RendererManager {
 			fn();
 		});
 	}
+}
+
+/** Total duration of arbitrary scene tracks, for non-active-scene exports. */
+function computeTracksDuration({ tracks }: { tracks: SceneTracks }): MediaTime {
+	const ends: number[] = [];
+	const collect = (elements: { startTime: number; duration: number }[]) => {
+		for (const el of elements) ends.push(el.startTime + el.duration);
+	};
+	collect(tracks.main.elements);
+	for (const track of tracks.overlay) collect(track.elements);
+	for (const track of tracks.audio) collect(track.elements);
+	return roundMediaTime({ time: ends.length ? Math.max(...ends) : 0 });
 }

@@ -8,14 +8,21 @@ interface Gap {
 	end: number;
 }
 
-/** Gaps on the main track: leading empty space + holes between clips. */
-export function findMainTrackGaps({ tracks }: { tracks: SceneTracks }): Gap[] {
-	const sorted = [...tracks.main.elements].sort(
-		(a, b) => a.startTime - b.startTime,
-	);
+/**
+ * Gaps across the whole timeline: intervals (incl. leading space) where NO
+ * track — main, overlay, or audio — has any content.
+ */
+export function findTimelineGaps({ tracks }: { tracks: SceneTracks }): Gap[] {
+	const allElements: { startTime: number; duration: number }[] = [
+		...tracks.main.elements,
+		...tracks.overlay.flatMap((t): { startTime: number; duration: number }[] =>
+			t.elements.map((el) => ({ startTime: el.startTime, duration: el.duration })),
+		),
+		...tracks.audio.flatMap((t) => t.elements),
+	].sort((a, b) => a.startTime - b.startTime);
 	const gaps: Gap[] = [];
 	let cursor = 0;
-	for (const element of sorted) {
+	for (const element of allElements) {
 		if (element.startTime > cursor + 1) {
 			gaps.push({ start: cursor, end: element.startTime });
 		}
@@ -49,8 +56,8 @@ function shiftAllTracks({
 }
 
 /**
- * Closes empty gaps on the main track, ripple-shifting every track so
- * overlays and audio stay in sync with the footage.
+ * Closes intervals where no track has content, ripple-shifting every track
+ * so footage, overlays, and audio stay in sync.
  *
  * scope "all": closes every gap (including leading space).
  * scope "at-time": closes only the gap containing the given time, if any.
@@ -73,7 +80,7 @@ export class CloseGapsCommand extends Command {
 		this.closedCount = 0;
 
 		if (this.options.scope === "at-time") {
-			const gap = findMainTrackGaps({ tracks }).find(
+			const gap = findTimelineGaps({ tracks }).find(
 				(g) => this.options.scope === "at-time" &&
 					this.options.time >= g.start &&
 					this.options.time < g.end,
@@ -84,7 +91,7 @@ export class CloseGapsCommand extends Command {
 		} else {
 			// Close left to right, recomputing after each shift.
 			for (let i = 0; i < 100; i++) {
-				const [gap] = findMainTrackGaps({ tracks });
+				const [gap] = findTimelineGaps({ tracks });
 				if (!gap) break;
 				tracks = shiftAllTracks({ tracks, gap });
 				this.closedCount += 1;

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
 import { MediaDragOverlay } from "@/components/editor/panels/assets/drag-overlay";
 import { DraggableItem } from "@/components/editor/panels/assets/draggable-item";
@@ -25,8 +25,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DEFAULT_NEW_ELEMENT_DURATION } from "@/timeline/creation";
-import { mediaTimeFromSeconds, type MediaTime } from "@/wasm";
+import type { MediaTime } from "@/wasm";
 import { useEditor } from "@/editor/use-editor";
 import { useFileUpload } from "@/media/use-file-upload";
 import { invokeAction } from "@/actions";
@@ -38,7 +37,8 @@ import {
 	useSelection,
 	useSelectionScope,
 } from "@/selection";
-import { buildElementFromMedia } from "@/timeline/element-utils";
+import { insertMediaAsset } from "@/features/editing/insert-media";
+import { assembleBinToTimeline } from "@/features/editing/assemble";
 import {
 	type MediaSortKey,
 	type MediaSortOrder,
@@ -50,6 +50,7 @@ import type { MediaAsset } from "@/media/types";
 import { cn } from "@/utils/ui";
 import {
 	CloudUploadIcon,
+	FilmRoll01Icon,
 	GridViewIcon,
 	LeftToRightListDashIcon,
 	SortingOneNineIcon,
@@ -202,6 +203,20 @@ export function MediaView() {
 						sortOrder={mediaSortOrder}
 						onSort={handleSort}
 						onImport={openFilePicker}
+						onAssemble={() => {
+							const { added, skipped } = assembleBinToTimeline({
+								editor,
+								assets: filteredMediaItems,
+							});
+							if (added > 0) {
+								toast.success(
+									`Assembled ${added} asset${added === 1 ? "" : "s"} onto the timeline`,
+									skipped ? { description: `${skipped} skipped` } : undefined,
+								);
+							} else {
+								toast.info("Nothing to assemble — import some media first");
+							}
+						}}
 					/>
 				}
 				className={cn(isDragOver && "bg-accent/30")}
@@ -223,6 +238,7 @@ export function MediaView() {
 						onRevealComplete={clearHighlight}
 					>
 						<MediaScopeRegistrar />
+						<MediaDeleteKeyHandler projectId={activeProject.metadata.id} />
 						<MediaItemList
 							items={filteredMediaItems}
 							mode={mediaViewMode}
@@ -237,6 +253,40 @@ export function MediaView() {
 
 function MediaScopeRegistrar() {
 	useSelectionScope();
+	return null;
+}
+
+/** Delete/Backspace removes the selected bin assets (unless typing in a field). */
+function MediaDeleteKeyHandler({ projectId }: { projectId: string }) {
+	const { selectedIds } = useSelection();
+
+	useEffect(() => {
+		if (selectedIds.length === 0) return;
+
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Delete" && event.key !== "Backspace") return;
+			const target = event.target as HTMLElement | null;
+			if (
+				target &&
+				(target.tagName === "INPUT" ||
+					target.tagName === "TEXTAREA" ||
+					target.isContentEditable)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			invokeAction("remove-media-assets", {
+				projectId,
+				assetIds: [...selectedIds],
+			});
+		};
+
+		window.addEventListener("keydown", handleKeyDown, { capture: true });
+		return () =>
+			window.removeEventListener("keydown", handleKeyDown, { capture: true });
+	}, [selectedIds, projectId]);
+
 	return null;
 }
 
@@ -260,21 +310,8 @@ function MediaAssetDraggable({
 		asset: MediaAsset;
 		startTime: MediaTime;
 	}) => {
-		const duration =
-			asset.duration != null
-				? mediaTimeFromSeconds({ seconds: asset.duration })
-				: DEFAULT_NEW_ELEMENT_DURATION;
-		const element = buildElementFromMedia({
-			mediaId: asset.id,
-			mediaType: asset.type,
-			name: asset.name,
-			duration,
-			startTime,
-		});
-		editor.timeline.insertElement({
-			element,
-			placement: { mode: "auto" },
-		});
+		// Premiere-style: video clips bring their audio onto a separate track.
+		insertMediaAsset({ editor, asset, startTime });
 	};
 
 	return (
@@ -315,15 +352,62 @@ function MediaItemWithContextMenu({
 		ids: string[];
 	}) => void;
 }) {
+	const editor = useEditor();
+	const activeProject = useEditor((e) => e.project.getActive());
 	const { isSelected, selectedIds } = useSelection();
 	const idsToDelete = isSelected(item.id) ? selectedIds : [item.id];
 	const deleteLabel =
 		idsToDelete.length > 1 ? `Delete ${idsToDelete.length} items` : "Delete";
 
+	const handleConvert = async () => {
+		const toastId = toast.loading(`Converting ${item.name}...`, {
+			description: "Re-encoding with ffmpeg on this computer.",
+		});
+		try {
+			const res = await fetch(
+				`/api/media/transcode?name=${encodeURIComponent(item.name)}`,
+				{ method: "POST", body: item.file },
+			);
+			if (!res.ok) {
+				const err = (await res.json().catch(() => null)) as {
+					error?: string;
+				} | null;
+				throw new Error(err?.error ?? `Conversion failed (${res.status})`);
+			}
+			const blob = await res.blob();
+			const base = item.name.replace(/\.[^.]+$/, "");
+			const file = new File([blob], `${base} (converted).mp4`, {
+				type: "video/mp4",
+			});
+			const [processed] = await processMediaAssets({ files: [file] });
+			if (!processed) throw new Error("Could not process converted video");
+			await editor.media.addMediaAsset({
+				projectId: activeProject.metadata.id,
+				asset: processed,
+			});
+			toast.success(`Converted ${item.name}`, {
+				id: toastId,
+				description: "The editable copy is in your assets.",
+			});
+		} catch (e) {
+			toast.error("Conversion failed", {
+				id: toastId,
+				description: e instanceof Error ? e.message : String(e),
+			});
+		}
+	};
+
 	return (
 		<ContextMenu>
 			<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
 			<ContextMenuContent>
+				{item.type === "video" && (
+					<ContextMenuItem onClick={() => void handleConvert()}>
+						{item.canDecode === false
+							? "Convert for editing (can't preview)"
+							: "Convert for editing"}
+					</ContextMenuItem>
+				)}
 				<ContextMenuItem>Export clips</ContextMenuItem>
 				<ContextMenuItem
 					variant="destructive"
@@ -472,6 +556,14 @@ function MediaPreview({
 						loading="lazy"
 						unoptimized
 					/>
+					{item.canDecode === false && (
+						<div
+							className="absolute top-1 left-1 rounded bg-red-600/90 px-1 text-[0.6rem] font-semibold text-white"
+							title="This browser can't decode this video. Right-click → Convert for editing."
+						>
+							No preview
+						</div>
+					)}
 					{shouldShowDurationBadge ? (
 						<MediaDurationBadge duration={item.duration} />
 					) : null}
@@ -513,6 +605,7 @@ function MediaActions({
 	sortOrder,
 	onSort,
 	onImport,
+	onAssemble,
 }: {
 	mediaViewMode: MediaViewMode;
 	setMediaViewMode: (mode: MediaViewMode) => void;
@@ -521,10 +614,27 @@ function MediaActions({
 	sortOrder: MediaSortOrder;
 	onSort: ({ key }: { key: MediaSortKey }) => void;
 	onImport: () => void;
+	onAssemble: () => void;
 }) {
 	return (
 		<div className="flex gap-1.5">
 			<TooltipProvider>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<Button
+							size="icon"
+							variant="ghost"
+							onClick={onAssemble}
+							disabled={isProcessing}
+							className="items-center justify-center"
+						>
+							<HugeiconsIcon icon={FilmRoll01Icon} />
+						</Button>
+					</TooltipTrigger>
+					<TooltipContent>
+						<p>Assemble all assets onto the timeline as one video</p>
+					</TooltipContent>
+				</Tooltip>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<Button

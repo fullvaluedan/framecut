@@ -24,6 +24,7 @@ import {
 import { canDeleteScene, getMainScene } from "@/timeline/scenes";
 import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
+import { nestSceneIntoActive } from "@/features/editing/nest-scene";
 
 export function ScenesView({ children }: { children: React.ReactNode }) {
 	const editor = useEditor();
@@ -108,6 +109,25 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 					<div className="flex items-center gap-2">
 						<Button
 							className="rounded-md"
+							variant="outline"
+							size="sm"
+							onClick={() =>
+								void editor.scenes
+									.createScene({
+										name: `Scene ${scenes.length + 1}`,
+										isMain: false,
+									})
+									.catch((e) =>
+										toast.error("Couldn't add scene", {
+											description: e instanceof Error ? e.message : String(e),
+										}),
+									)
+							}
+						>
+							Add scene
+						</Button>
+						<Button
+							className="rounded-md"
 							variant={isSelectMode ? "default" : "outline"}
 							size="sm"
 							onClick={handleSelectMode}
@@ -141,28 +161,45 @@ export function ScenesView({ children }: { children: React.ReactNode }) {
 					) : (
 						<div className="space-y-2">
 							{scenes.map((scene) => (
-								<Button
-									key={scene.id}
-									variant="outline"
-									className={cn(
-										"w-full justify-between font-normal",
-										currentScene?.id === scene.id &&
-											!isSelectMode &&
-											"border-primary !text-primary",
-										isSelectMode &&
-											selectedScenes.has(scene.id) &&
-											"bg-accent border-foreground/30",
-									)}
-									onClick={() => handleSceneSwitch(scene.id)}
-								>
-									<span>{scene.name}</span>
-									<div className="flex items-center gap-2">
-										{((isSelectMode && selectedScenes.has(scene.id)) ||
-											(!isSelectMode && currentScene?.id === scene.id)) && (
-											<Check className="size-4" />
+								<div key={scene.id} className="flex items-center gap-1.5">
+									<Button
+										variant="outline"
+										className={cn(
+											"w-full flex-1 justify-between font-normal",
+											currentScene?.id === scene.id &&
+												!isSelectMode &&
+												"border-primary !text-primary",
+											isSelectMode &&
+												selectedScenes.has(scene.id) &&
+												"bg-accent border-foreground/30",
 										)}
-									</div>
-								</Button>
+										onClick={() => handleSceneSwitch(scene.id)}
+									>
+										<span>{scene.name}</span>
+										<div className="flex items-center gap-2">
+											{((isSelectMode && selectedScenes.has(scene.id)) ||
+												(!isSelectMode && currentScene?.id === scene.id)) && (
+												<Check className="size-4" />
+											)}
+										</div>
+									</Button>
+									{!isSelectMode && currentScene?.id !== scene.id && (
+										<Button
+											variant="outline"
+											size="sm"
+											className="shrink-0"
+											title={`Render "${scene.name}" and place it as a clip at the playhead`}
+											onClick={() =>
+												void nestSceneIntoActive({
+													editor,
+													sceneId: scene.id,
+												}).catch(() => undefined)
+											}
+										>
+											Nest
+										</Button>
+									)}
+								</div>
 							))}
 						</div>
 					)}

@@ -124,6 +124,8 @@ export async function processMediaAssets({
 		let height: number | undefined;
 		let fps: number | undefined;
 		let hasAudio: boolean | undefined;
+		let canDecode: boolean | undefined;
+		let codec: string | undefined;
 
 		try {
 			if (fileType === "image") {
@@ -142,6 +144,8 @@ export async function processMediaAssets({
 						: undefined;
 					hasAudio = videoData.hasAudio;
 					thumbnailUrl = videoData.thumbnailUrl ?? undefined;
+					canDecode = videoData.canDecode;
+					codec = videoData.codec ?? undefined;
 
 					if (!videoData.canDecode) {
 						toast.error(`Can't preview ${file.name}`, {
@@ -175,6 +179,8 @@ export async function processMediaAssets({
 				height,
 				fps,
 				hasAudio,
+				canDecode,
+				codec,
 			});
 
 			await new Promise((resolve) => setTimeout(resolve, 0));

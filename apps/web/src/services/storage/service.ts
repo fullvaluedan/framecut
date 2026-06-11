@@ -76,6 +76,15 @@ class StorageService {
 			storeName: "saved-sounds",
 			version: this.config.version,
 		});
+
+		// Ask the browser to mark this origin's storage as persistent so media
+		// files in OPFS can't be silently evicted under storage pressure.
+		if (
+			typeof navigator !== "undefined" &&
+			navigator.storage?.persist
+		) {
+			void navigator.storage.persist().catch(() => undefined);
+		}
 	}
 
 	private async ensureMigrations(): Promise<void> {
@@ -305,6 +314,10 @@ class StorageService {
 			duration: mediaAsset.duration,
 			thumbnailUrl: mediaAsset.thumbnailUrl,
 			ephemeral: mediaAsset.ephemeral,
+			hasAudio: mediaAsset.hasAudio,
+			fps: mediaAsset.fps,
+			canDecode: mediaAsset.canDecode,
+			codec: mediaAsset.codec,
 		};
 
 		try {
@@ -378,6 +391,10 @@ class StorageService {
 			duration: metadata.duration,
 			thumbnailUrl: metadata.thumbnailUrl,
 			ephemeral: metadata.ephemeral,
+			hasAudio: metadata.hasAudio,
+			fps: metadata.fps,
+			canDecode: metadata.canDecode,
+			codec: metadata.codec,
 		};
 	}
 
