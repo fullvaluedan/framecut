@@ -122,6 +122,13 @@ export interface VideoElement extends BaseTimelineElement {
 	retime?: RetimeConfig;
 	effects?: Effect[];
 	masks?: Mask[];
+	/** FrameCut: set on AI-generated HyperFrames clips; enables re-render and template swap. */
+	framecutAi?: {
+		compId: string;
+		templateId: string;
+		variables: Record<string, string | number | boolean>;
+		groupId: string;
+	};
 }
 
 export interface ImageElement extends BaseTimelineElement {

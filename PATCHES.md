@@ -23,7 +23,9 @@ All eight patches were authored and build-validated (`bun run build:web` exit 0)
 |---|---|---|---|
 | `apps/web/src/timeline/timeline-store.ts` | Added `videoWaveformsEnabled` flag (default true) + toggle, persisted | 2026-06-11 | Plain zustand UI flag; trivial to re-add |
 | `apps/web/src/timeline/components/timeline-element.tsx` | `TiledMediaContent` renders an `AudioWaveform` strip on the bottom 40% of video clips with source audio (reuses audio-clip waveform infra + cache) | 2026-06-11 | Core feature; reimplement against whatever clip renderer the rewrite ships |
-| `apps/web/src/timeline/components/timeline-toolbar.tsx` | Toolbar toggle button for video-clip waveforms (next to snapping/ripple) | 2026-06-11 | Trivial |
+| `apps/web/src/timeline/components/timeline-toolbar.tsx` | Toolbar toggle button for video-clip waveforms (next to snapping/ripple); RUN HYPERFRAMES button in right section | 2026-06-11 | Trivial |
+| `apps/web/src/timeline/types.ts` | Added optional `framecutAi` metadata to `VideoElement` (compId/templateId/variables/groupId) — links AI clips to their comp source for re-render and template swap | 2026-06-11 | Core data-model addition; must be carried to any future base |
+| `apps/web/src/app/layout.tsx` | React Scan dev overlay now opt-in via `NEXT_PUBLIC_REACT_SCAN=1` (was always-on in dev; confused non-dev use of the dev server) | 2026-06-11 | Trivial |
 | `apps/web/src/components/editor/panels/assets/views/settings/index.tsx` | Registered "AI" tab in the settings panel; content lives in `features/ai-generate/` | 2026-06-11 | 4-line hook-in; re-register against whatever settings UI the rewrite ships |
 | `apps/web/next.config.ts` | Added `transpilePackages: ["@framecut/hf-bridge"]` + `serverExternalPackages: ["hyperframes"]` (CLI is resolved at runtime, must not be bundled) | 2026-06-11 | Two lines |
 | `apps/web/package.json` | Added `@framecut/hf-bridge: workspace:*` dependency | 2026-06-11 | One line |

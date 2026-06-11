@@ -50,6 +50,7 @@ import { OcRippleIcon } from "@/components/icons";
 import { GraphEditorPopover } from "./graph-editor/popover";
 import { PopoverTrigger } from "@/components/ui/popover";
 import { useGraphEditorController } from "./graph-editor/use-controller";
+import { RunHyperframesButton } from "@/features/ai-generate/components/run-hyperframes-button";
 
 export function TimelineToolbar({
 	zoomLevel,
@@ -287,6 +288,10 @@ function ToolbarRightSection({
 
 	return (
 		<div className="flex items-center gap-1">
+			<RunHyperframesButton />
+
+			<div className="bg-border mx-1 h-6 w-px" />
+
 			<TooltipProvider delayDuration={500}>
 				<ToolbarButton
 					icon={<HugeiconsIcon icon={MagnetIcon} />}
