@@ -25,6 +25,25 @@ export function getTimelineZoomMin({
 	return Math.min(TIMELINE_ZOOM_MAX, zoomToFit);
 }
 
+/**
+ * Premiere's `\` fit: zoom so the content fills (almost) the whole visible
+ * width — unlike min zoom, which keeps 75% of the width as padding.
+ */
+export function getTimelineZoomFit({
+	duration,
+	containerWidth,
+}: {
+	duration: number;
+	containerWidth: number | null | undefined;
+}): number {
+	const safeDurationSeconds = Math.max(duration / TICKS_PER_SECOND, 1);
+	const safeContainerWidth = containerWidth ?? 1000;
+	const zoomToFill =
+		(safeContainerWidth * 0.95) /
+		(safeDurationSeconds * BASE_TIMELINE_PIXELS_PER_SECOND);
+	return Math.min(TIMELINE_ZOOM_MAX, zoomToFill);
+}
+
 export function getTimelinePaddingPx({
 	containerWidth,
 	zoomLevel,

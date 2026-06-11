@@ -17,7 +17,6 @@ import {
 import type { AnimationPath } from "@/animation/types";
 import { useElementPlayhead } from "@/components/editor/panels/properties/hooks/use-element-playhead";
 import { useKeyframedParamProperty } from "@/components/editor/panels/properties/hooks/use-keyframed-param-property";
-import { KeyframeToggle } from "@/components/editor/panels/properties/components/keyframe-toggle";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useEditor } from "@/editor/use-editor";
 import {
@@ -35,9 +34,12 @@ import type { MediaTime } from "@/wasm";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
 	ArrowDown01Icon,
+	ArrowLeft01Icon,
 	ArrowRight01Icon,
 	ArrowTurnBackwardIcon,
 	ArrowUp01Icon,
+	KeyframeIcon,
+	StopWatchIcon,
 } from "@hugeicons/core-free-icons";
 import { cn } from "@/utils/ui";
 
@@ -81,6 +83,179 @@ function paramRange(param: ElementParamDefinition): {
 }
 
 /**
+ * Premiere keyframe model for one property (or an X/Y pair sharing one
+ * stopwatch). The stopwatch turns animation on/off — OFF removes every
+ * keyframe on the property. ◀ ◆ ▶ navigate keyframes and toggle one at
+ * the playhead.
+ */
+function useKfGroup({
+	ctx,
+	entries,
+}: {
+	ctx: RowContext;
+	entries: { path: string; value: number }[];
+}) {
+	const { element, trackId, localTime, isPlayheadWithinElementRange } = ctx;
+	const editor = useEditor();
+	const channels = entries.map((entry) => ({
+		...entry,
+		keys: ((element.animations?.[entry.path as AnimationPath] as
+			| { keys?: { id: string; time: number }[] }
+			| undefined)?.keys ?? []) as { id: string; time: number }[],
+	}));
+	const animated = channels.some((c) => c.keys.length > 0);
+	const atPlayhead = entries.map((entry) => ({
+		path: entry.path,
+		kf: getKeyframeAtTime({
+			animations: element.animations,
+			propertyPath: entry.path,
+			time: localTime,
+		}),
+	}));
+	const anyAtPlayhead = atPlayhead.some((a) => a.kf);
+	const allTimes = [
+		...new Set(channels.flatMap((c) => c.keys.map((k) => k.time))),
+	].sort((a, b) => a - b);
+	const EPSILON = 2; // ticks
+	const prevTime = [...allTimes].reverse().find((t) => t < localTime - EPSILON);
+	const nextTime = allTimes.find((t) => t > localTime + EPSILON);
+
+	const addAllAtPlayhead = () =>
+		editor.timeline.upsertKeyframes({
+			keyframes: entries.map((entry) => ({
+				trackId,
+				elementId: element.id,
+				propertyPath: entry.path as AnimationPath,
+				time: localTime,
+				value: entry.value,
+			})),
+		});
+
+	const toggleAnimation = () => {
+		if (animated) {
+			editor.timeline.removeKeyframes({
+				keyframes: channels.flatMap((c) =>
+					c.keys.map((k) => ({
+						trackId,
+						elementId: element.id,
+						propertyPath: c.path as AnimationPath,
+						keyframeId: k.id,
+					})),
+				),
+			});
+			return;
+		}
+		if (!isPlayheadWithinElementRange) return;
+		addAllAtPlayhead();
+	};
+
+	const toggleAtPlayhead = () => {
+		if (!isPlayheadWithinElementRange) return;
+		if (anyAtPlayhead) {
+			editor.timeline.removeKeyframes({
+				keyframes: atPlayhead
+					.filter((a) => a.kf)
+					.map((a) => ({
+						trackId,
+						elementId: element.id,
+						propertyPath: a.path as AnimationPath,
+						keyframeId: (a.kf as { id: string }).id,
+					})),
+			});
+			return;
+		}
+		addAllAtPlayhead();
+	};
+
+	const seekToLocal = (t: number | undefined) => {
+		if (t === undefined) return;
+		editor.playback.seek({
+			time: (element.startTime + t) as typeof element.startTime,
+		});
+	};
+
+	return {
+		animated,
+		anyAtPlayhead,
+		hasPrev: prevTime !== undefined,
+		hasNext: nextTime !== undefined,
+		within: isPlayheadWithinElementRange,
+		toggleAnimation,
+		toggleAtPlayhead,
+		goPrev: () => seekToLocal(prevTime),
+		goNext: () => seekToLocal(nextTime),
+	};
+}
+
+type KfGroup = ReturnType<typeof useKfGroup>;
+
+function Stopwatch({ group, label }: { group: KfGroup; label: string }) {
+	return (
+		<button
+			type="button"
+			title={
+				group.animated
+					? `Turn off ${label} animation (removes ALL its keyframes)`
+					: `Animate ${label} (adds a keyframe at the playhead)`
+			}
+			className={cn(
+				"flex w-6 shrink-0 items-center justify-center",
+				group.animated ? "text-primary" : "text-muted-foreground/60",
+				!group.animated && !group.within && "opacity-40",
+			)}
+			onClick={group.toggleAnimation}
+		>
+			<HugeiconsIcon icon={StopWatchIcon} size={13} />
+		</button>
+	);
+}
+
+function KfNav({ group }: { group: KfGroup }) {
+	if (!group.animated) return null;
+	const navBtn =
+		"flex h-4 w-4 items-center justify-center disabled:opacity-25";
+	return (
+		<div className="text-muted-foreground flex items-center">
+			<button
+				type="button"
+				title="Go to previous keyframe"
+				className={navBtn}
+				disabled={!group.hasPrev}
+				onClick={group.goPrev}
+			>
+				<HugeiconsIcon icon={ArrowLeft01Icon} size={11} />
+			</button>
+			<button
+				type="button"
+				title={
+					group.anyAtPlayhead
+						? "Remove keyframe at playhead"
+						: "Add keyframe at playhead"
+				}
+				className={cn(navBtn, group.anyAtPlayhead && "text-primary")}
+				disabled={!group.within}
+				onClick={group.toggleAtPlayhead}
+			>
+				<HugeiconsIcon
+					icon={KeyframeIcon}
+					size={11}
+					className={cn(group.anyAtPlayhead && "fill-primary")}
+				/>
+			</button>
+			<button
+				type="button"
+				title="Go to next keyframe"
+				className={navBtn}
+				disabled={!group.hasNext}
+				onClick={group.goNext}
+			>
+				<HugeiconsIcon icon={ArrowRight01Icon} size={11} />
+			</button>
+		</div>
+	);
+}
+
+/**
  * Premiere-style value control. The blue number itself is the drag surface:
  * click-and-hold then drag left/right to scrub (pointer-locked), release
  * without moving to type an exact value. Tiny ▲/▼ arrows nudge by one step.
@@ -117,8 +292,11 @@ function ValueField({
 }) {
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
+	// Live readout while dragging: previews don't flow back into `resolved`
+	// until commit, so the scrub keeps its own display text.
+	const [scrubText, setScrubText] = useState<string | null>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const display = formatDisplay(resolved * factor, decimals);
+	const display = scrubText ?? formatDisplay(resolved * factor, decimals);
 
 	useEffect(() => {
 		if (editing) {
@@ -133,8 +311,12 @@ function ValueField({
 		if (maxModel !== undefined) next = Math.min(maxModel, next);
 		return next;
 	};
-	const previewDisplay = (displayValue: number) =>
-		onPreviewModel(clampModel(displayValue / factor));
+	/** Previews the clamped value and returns it in display units. */
+	const previewDisplay = (displayValue: number): number => {
+		const clampedModel = clampModel(displayValue / factor);
+		onPreviewModel(clampedModel);
+		return clampedModel * factor;
+	};
 
 	const nudge = (direction: 1 | -1) => {
 		previewDisplay(resolved * factor + direction * step);
@@ -165,9 +347,10 @@ function ValueField({
 				}
 			}
 			if (scrubbing) {
-				previewDisplay(
+				const shown = previewDisplay(
 					startDisplay + (cumulative / SCRUB_PX_PER_STEP) * step,
 				);
+				setScrubText(formatDisplay(shown, decimals));
 			}
 		};
 		const onUp = () => {
@@ -178,6 +361,7 @@ function ValueField({
 			} catch {
 				// lock was never granted
 			}
+			setScrubText(null);
 			if (scrubbing) {
 				onCommit();
 			} else {
@@ -191,12 +375,16 @@ function ValueField({
 	};
 
 	return (
-		<div className="group/value flex items-center gap-0.5">
-			{onResetModel && !isDefault && (
+		<div className="flex items-center gap-0.5">
+			{onResetModel && (
 				<button
 					type="button"
-					title="Reset to default"
-					className="text-muted-foreground hover:text-foreground opacity-0 transition-opacity group-hover/value:opacity-100"
+					title={isDefault ? "Already at default" : "Reset to default"}
+					disabled={isDefault}
+					className={cn(
+						"text-muted-foreground hover:text-foreground",
+						isDefault && "cursor-default opacity-25 hover:text-muted-foreground",
+					)}
 					onClick={onResetModel}
 				>
 					<HugeiconsIcon icon={ArrowTurnBackwardIcon} size={11} />
@@ -275,27 +463,18 @@ function ValueField({
 
 function Row({
 	label,
-	keyframe,
+	stopwatch,
 	children,
 	indent = true,
 }: {
 	label: string;
-	keyframe?: { isActive: boolean; isDisabled: boolean; onToggle: () => void };
+	stopwatch?: React.ReactNode;
 	children: React.ReactNode;
 	indent?: boolean;
 }) {
 	return (
 		<div className={cn("flex h-7 items-center gap-1 pr-2", indent && "pl-1")}>
-			{keyframe ? (
-				<KeyframeToggle
-					isActive={keyframe.isActive}
-					isDisabled={keyframe.isDisabled}
-					title={`Toggle ${label.toLowerCase()} keyframe at the playhead`}
-					onToggle={keyframe.onToggle}
-				/>
-			) : (
-				<span className="w-6" />
-			)}
+			{stopwatch ?? <span className="w-6 shrink-0" />}
 			<span className="w-[84px] shrink-0 truncate text-xs text-foreground/75">
 				{label}
 			</span>
@@ -378,20 +557,18 @@ function SingleRow({
 		buildBaseUpdates: ({ value }) =>
 			writeElementParamValue({ element, param: fallbackParam, value }),
 	});
-	if (!param) return null;
 	const resolvedNumber = typeof resolved === "number" ? resolved : 0;
+	const kfGroup = useKfGroup({
+		ctx,
+		entries: [{ path: paramKey, value: resolvedNumber }],
+	});
+	if (!param) return null;
 	const defaultNumber =
 		typeof param.default === "number" ? param.default : 0;
 
 	return (
-		<Row
-			label={label}
-			keyframe={{
-				isActive: animated.isKeyframedAtTime,
-				isDisabled: !isPlayheadWithinElementRange,
-				onToggle: animated.toggleKeyframe,
-			}}
-		>
+		<Row label={label} stopwatch={<Stopwatch group={kfGroup} label={label} />}>
+			<KfNav group={kfGroup} />
 			<ValueField
 				resolved={resolvedNumber}
 				factor={factor}
@@ -478,69 +655,22 @@ function PositionRow({ ctx }: { ctx: RowContext }) {
 	};
 
 	const commit = () => editor.timeline.commitPreview();
-
-	const kfX = getKeyframeAtTime({
-		animations: element.animations,
-		propertyPath: POSITION_X,
-		time: localTime,
+	const kfGroup = useKfGroup({
+		ctx,
+		entries: [
+			{ path: POSITION_X, value: x },
+			{ path: POSITION_Y, value: y },
+		],
 	});
-	const kfY = getKeyframeAtTime({
-		animations: element.animations,
-		propertyPath: POSITION_Y,
-		time: localTime,
-	});
-	const togglePair = () => {
-		if (!isPlayheadWithinElementRange) return;
-		if (kfX || kfY) {
-			const removals = [];
-			if (kfX)
-				removals.push({
-					trackId,
-					elementId: element.id,
-					propertyPath: POSITION_X as AnimationPath,
-					keyframeId: kfX.id,
-				});
-			if (kfY)
-				removals.push({
-					trackId,
-					elementId: element.id,
-					propertyPath: POSITION_Y as AnimationPath,
-					keyframeId: kfY.id,
-				});
-			editor.timeline.removeKeyframes({ keyframes: removals });
-			return;
-		}
-		editor.timeline.upsertKeyframes({
-			keyframes: [
-				{
-					trackId,
-					elementId: element.id,
-					propertyPath: POSITION_X as AnimationPath,
-					time: localTime,
-					value: x,
-				},
-				{
-					trackId,
-					elementId: element.id,
-					propertyPath: POSITION_Y as AnimationPath,
-					time: localTime,
-					value: y,
-				},
-			],
-		});
-	};
 
 	if (!paramX || !paramY) return null;
 
 	return (
 		<Row
 			label="Position"
-			keyframe={{
-				isActive: Boolean(kfX || kfY),
-				isDisabled: !isPlayheadWithinElementRange,
-				onToggle: togglePair,
-			}}
+			stopwatch={<Stopwatch group={kfGroup} label="position" />}
 		>
+			<KfNav group={kfGroup} />
 			<ValueField
 				resolved={x}
 				factor={1}
@@ -650,69 +780,24 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 		});
 	};
 	const commit = () => editor.timeline.commitPreview();
-
-	const kfX = getKeyframeAtTime({
-		animations: element.animations,
-		propertyPath: SCALE_X,
-		time: localTime,
+	const kfGroup = useKfGroup({
+		ctx,
+		entries: [
+			{ path: SCALE_X, value: sx },
+			{ path: SCALE_Y, value: sy },
+		],
 	});
-	const kfY = getKeyframeAtTime({
-		animations: element.animations,
-		propertyPath: SCALE_Y,
-		time: localTime,
-	});
-	const togglePair = () => {
-		if (!isPlayheadWithinElementRange) return;
-		if (kfX || kfY) {
-			const removals = [];
-			if (kfX)
-				removals.push({
-					trackId,
-					elementId: element.id,
-					propertyPath: SCALE_X as AnimationPath,
-					keyframeId: kfX.id,
-				});
-			if (kfY)
-				removals.push({
-					trackId,
-					elementId: element.id,
-					propertyPath: SCALE_Y as AnimationPath,
-					keyframeId: kfY.id,
-				});
-			editor.timeline.removeKeyframes({ keyframes: removals });
-			return;
-		}
-		editor.timeline.upsertKeyframes({
-			keyframes: [
-				{
-					trackId,
-					elementId: element.id,
-					propertyPath: SCALE_X as AnimationPath,
-					time: localTime,
-					value: sx,
-				},
-				{
-					trackId,
-					elementId: element.id,
-					propertyPath: SCALE_Y as AnimationPath,
-					time: localTime,
-					value: sy,
-				},
-			],
-		});
-	};
 
 	if (!paramX || !paramY) return null;
 	const defaultScale = Number(paramX.default) || 1;
-	const keyframeState = {
-		isActive: Boolean(kfX || kfY),
-		isDisabled: !isPlayheadWithinElementRange,
-		onToggle: togglePair,
-	};
 
 	return (
 		<>
-			<Row label={uniform ? "Scale" : "Scale Height"} keyframe={keyframeState}>
+			<Row
+				label={uniform ? "Scale" : "Scale Height"}
+				stopwatch={<Stopwatch group={kfGroup} label="scale" />}
+			>
+				<KfNav group={kfGroup} />
 				<ValueField
 					resolved={sy}
 					factor={100}
@@ -728,7 +813,7 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 					}}
 				/>
 			</Row>
-			<Row label="Scale Width" keyframe={undefined}>
+			<Row label="Scale Width">
 				<div className={cn(uniform && "pointer-events-none opacity-40")}>
 					<ValueField
 						resolved={sx}
@@ -746,7 +831,7 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 					/>
 				</div>
 			</Row>
-			<Row label="" keyframe={undefined}>
+			<Row label="">
 				<label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/75">
 					<Checkbox
 						checked={uniform}
