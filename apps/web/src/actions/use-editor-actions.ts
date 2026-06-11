@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { useActionHandler } from "@/actions/use-action-handler";
+import { CloseGapsCommand } from "@/commands/timeline/track/close-gaps";
 import { useEditor } from "@/editor/use-editor";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import {
@@ -300,6 +301,15 @@ export function useEditorActions() {
 	useActionHandler(
 		"delete-selected",
 		() => {
+			// With nothing selected, Delete closes the timeline gap under the
+			// playhead (click a gap to park the playhead there, then Delete).
+			const closeGapAtPlayhead = () => {
+				const command = new CloseGapsCommand({
+					scope: "at-time",
+					time: editor.playback.getCurrentTime(),
+				});
+				editor.command.execute({ command });
+			};
 			switch (editor.selection.getActiveSelectionKind()) {
 				case "mask-points":
 					if (!selectedMaskPointSelection) {
@@ -321,6 +331,7 @@ export function useEditorActions() {
 					return;
 				case "elements":
 					if (selectedElements.length === 0) {
+						closeGapAtPlayhead();
 						return;
 					}
 					editor.timeline.deleteElements({
@@ -328,6 +339,7 @@ export function useEditorActions() {
 					});
 					return;
 				default:
+					closeGapAtPlayhead();
 					return;
 			}
 		},

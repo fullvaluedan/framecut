@@ -29,6 +29,7 @@ import { cn } from "@/utils/ui";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+	ArrowShrink02Icon,
 	AudioWave01Icon,
 	Bookmark02Icon,
 	Delete02Icon,
@@ -51,6 +52,8 @@ import { GraphEditorPopover } from "./graph-editor/popover";
 import { PopoverTrigger } from "@/components/ui/popover";
 import { useGraphEditorController } from "./graph-editor/use-controller";
 import { RunHyperframesButton } from "@/features/ai-generate/components/run-hyperframes-button";
+import { CloseGapsCommand } from "@/commands/timeline/track/close-gaps";
+import { toast } from "sonner";
 
 export function TimelineToolbar({
 	zoomLevel,
@@ -277,6 +280,7 @@ function ToolbarRightSection({
 	onZoomChange: (zoom: number) => void;
 	onZoom: (options: { direction: "in" | "out" }) => void;
 }) {
+	const editor = useEditor();
 	const snappingEnabled = useTimelineStore((s) => s.snappingEnabled);
 	const rippleEditingEnabled = useTimelineStore((s) => s.rippleEditingEnabled);
 	const videoWaveformsEnabled = useTimelineStore(
@@ -305,6 +309,23 @@ function ToolbarRightSection({
 					isActive={rippleEditingEnabled}
 					tooltip="Ripple editing"
 					onClick={() => toggleRippleEditing()}
+				/>
+
+				<ToolbarButton
+					icon={<HugeiconsIcon icon={ArrowShrink02Icon} />}
+					tooltip="Close gaps (remove empty space between clips)"
+					onClick={() => {
+						const command = new CloseGapsCommand({ scope: "all" });
+						editor.command.execute({ command });
+						const closed = command.getClosedCount();
+						if (closed > 0) {
+							toast.success(
+								`Closed ${closed} gap${closed === 1 ? "" : "s"}`,
+							);
+						} else {
+							toast.info("No gaps to close");
+						}
+					}}
 				/>
 
 				<ToolbarButton
