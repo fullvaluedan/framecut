@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { findHyperframesPackageDir } from "./renderer";
 
 export interface DoctorReport {
 	node: { ok: boolean; detail: string };
@@ -38,7 +38,10 @@ export async function runDoctor(): Promise<DoctorReport> {
 
 	let hyperframes: { ok: boolean; detail: string };
 	try {
-		const pkg = require("hyperframes/package.json") as { version: string };
+		const pkgDir = findHyperframesPackageDir();
+		const pkg = JSON.parse(
+			readFileSync(path.join(pkgDir, "package.json"), "utf8"),
+		) as { version: string };
 		hyperframes = { ok: true, detail: `hyperframes ${pkg.version} (pinned)` };
 	} catch (e) {
 		hyperframes = { ok: false, detail: `not installed: ${String(e).slice(0, 80)}` };

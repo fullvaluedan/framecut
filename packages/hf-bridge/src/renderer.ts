@@ -1,25 +1,60 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { getTemplate } from "./templates/index";
 import type { RenderJob, RenderOutcome } from "./types";
 
-const require = createRequire(import.meta.url);
+/**
+ * Locates the pinned hyperframes package by walking up from cwd.
+ * Deliberately avoids require()/import so bundlers (Turbopack dev) never
+ * try to statically analyze the lookup.
+ */
+export function findHyperframesPackageDir(): string {
+	let dir = process.cwd();
+	for (let i = 0; i < 8; i++) {
+		// Hoisted layout (npm/pnpm) and bun's isolated layout for this package.
+		const candidates = [
+			path.join(dir, "node_modules", "hyperframes"),
+			path.join(dir, "packages", "hf-bridge", "node_modules", "hyperframes"),
+		];
+		// Bun's content store: node_modules/.bun/hyperframes@<version>/node_modules/hyperframes
+		const bunStore = path.join(dir, "node_modules", ".bun");
+		if (existsSync(bunStore)) {
+			for (const entry of readdirSync(bunStore)) {
+				if (entry.startsWith("hyperframes@")) {
+					candidates.push(
+						path.join(bunStore, entry, "node_modules", "hyperframes"),
+					);
+				}
+			}
+		}
+		for (const candidate of candidates) {
+			if (existsSync(path.join(candidate, "package.json"))) {
+				return candidate;
+			}
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) break;
+		dir = parent;
+	}
+	throw new Error(
+		"hyperframes package not found in node_modules — run `bun install` in the repo root",
+	);
+}
 
-/** Resolves the pinned hyperframes CLI entry from this package's dependency. */
 function resolveHyperframesCli(): string {
-	const pkgJsonPath = require.resolve("hyperframes/package.json");
-	const pkg = require(pkgJsonPath) as { bin?: string | Record<string, string> };
-	const binRel =
-		typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.hyperframes;
+	const pkgDir = findHyperframesPackageDir();
+	const pkg = JSON.parse(
+		readFileSync(path.join(pkgDir, "package.json"), "utf8"),
+	) as { bin?: string | Record<string, string> };
+	const binRel = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.hyperframes;
 	if (!binRel) {
 		throw new Error("hyperframes package has no bin entry");
 	}
-	return path.join(path.dirname(pkgJsonPath), binRel);
+	return path.join(pkgDir, binRel);
 }
 
 /** Comp sources persist here so re-renders/template swaps never lose them. */
