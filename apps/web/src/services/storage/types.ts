@@ -27,6 +27,9 @@ export interface MediaAssetData {
 	hasAudio?: boolean;
 	ephemeral?: boolean;
 	thumbnailUrl?: string;
+	/** False when the browser cannot decode this video (e.g. HEVC) — preview will be black. */
+	canDecode?: boolean;
+	codec?: string;
 }
 
 export type SerializedScene = Omit<TScene, "createdAt" | "updatedAt"> & {
