@@ -53,6 +53,8 @@ import { GraphEditorPopover } from "./graph-editor/popover";
 import { PopoverTrigger } from "@/components/ui/popover";
 import { useGraphEditorController } from "./graph-editor/use-controller";
 import { RunHyperframesButton } from "@/features/ai-generate/components/run-hyperframes-button";
+import { AiCutMenu } from "@/features/editing/components/ai-cut-menu";
+import { nestSelectionIntoNewScene } from "@/features/editing/nest-scene";
 import { CloseGapsCommand } from "@/commands/timeline/track/close-gaps";
 import { toast } from "sonner";
 
@@ -200,6 +202,13 @@ function ToolbarLeftSection() {
 				/>
 
 				<ToolbarButton
+					icon={<HugeiconsIcon icon={Layers01Icon} />}
+					tooltip="Nest selection into a new sequence"
+					disabled={selectedElements.length === 0}
+					onClick={() => void nestSelectionIntoNewScene({ editor }).catch(() => undefined)}
+				/>
+
+				<ToolbarButton
 					icon={<HugeiconsIcon icon={Delete02Icon} />}
 					tooltip="Delete element"
 					onClick={({ event }) =>
@@ -297,6 +306,7 @@ function ToolbarRightSection({
 	return (
 		<div className="flex items-center gap-1">
 			<RunHyperframesButton />
+			<AiCutMenu />
 
 			<div className="bg-border mx-1 h-6 w-px" />
 

@@ -78,7 +78,11 @@ function extractJson(text: string): unknown {
 	}
 }
 
-async function planViaApiKey(prompt: string, apiKey: string): Promise<unknown> {
+async function planViaApiKeySchema(
+	prompt: string,
+	apiKey: string,
+	schema: object,
+): Promise<unknown> {
 	const res = await fetch("https://api.anthropic.com/v1/messages", {
 		method: "POST",
 		headers: {
@@ -91,7 +95,7 @@ async function planViaApiKey(prompt: string, apiKey: string): Promise<unknown> {
 			max_tokens: 8000,
 			thinking: { type: "adaptive" },
 			output_config: {
-				format: { type: "json_schema", schema: PLAN_SCHEMA },
+				format: { type: "json_schema", schema },
 			},
 			messages: [{ role: "user", content: prompt }],
 		}),
@@ -187,6 +191,88 @@ function sanitizePlan(raw: unknown, totalDurationSec: number): EffectPlan {
 	return { items: nonOverlapping.slice(0, 8) };
 }
 
+const CUTS_SCHEMA = {
+	type: "object",
+	properties: {
+		cuts: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					startSec: { type: "number" },
+					endSec: { type: "number" },
+					reason: { type: "string" },
+				},
+				required: ["startSec", "endSec", "reason"],
+				additionalProperties: false,
+			},
+		},
+	},
+	required: ["cuts"],
+	additionalProperties: false,
+} as const;
+
+export interface RepeatCut {
+	startSec: number;
+	endSec: number;
+	reason: string;
+}
+
+function buildRepeatsPrompt({
+	segments,
+}: {
+	segments: TranscriptSegment[];
+}): string {
+	const transcript = segments
+		.map((s) => `[${s.start.toFixed(2)}–${s.end.toFixed(2)}] ${s.text.trim()}`)
+		.join("\n");
+	return `You are an expert video editor cleaning up a talking-head recording. Below is the transcript with timestamps in seconds.
+
+Find RETAKES: places where the speaker repeats or restarts the same sentence/thought (often after a stumble, filler, or self-correction). For each retake, the LAST attempt is the keeper — return cut ranges that remove the earlier attempt(s), including any stumble between them.
+
+Rules:
+- Only cut clear repeats/restarts of the same content. Do not cut intentional repetition for emphasis.
+- Cut boundaries must align with the transcript timestamps (start of the abandoned attempt to start of the kept attempt).
+- If there are no retakes, return an empty list.
+
+TRANSCRIPT:
+${transcript}
+
+Respond with ONLY JSON: {"cuts": [{"startSec", "endSec", "reason"}, ...]}.`;
+}
+
+export async function planRepeatCuts({
+	segments,
+	auth,
+}: {
+	segments: TranscriptSegment[];
+	auth: ClaudeAuth;
+}): Promise<RepeatCut[]> {
+	if (!segments.length) return [];
+	const prompt = buildRepeatsPrompt({ segments });
+	const raw =
+		auth.mode === "api-key"
+			? await planViaApiKeySchema(prompt, auth.apiKey, CUTS_SCHEMA)
+			: await planViaClaudeCode(prompt);
+	const cuts = (raw as { cuts?: unknown[] })?.cuts;
+	if (!Array.isArray(cuts)) return [];
+	return cuts
+		.map((c) => {
+			const cut = c as Record<string, unknown>;
+			return {
+				startSec: Number(cut.startSec),
+				endSec: Number(cut.endSec),
+				reason: String(cut.reason ?? "").slice(0, 200),
+			};
+		})
+		.filter(
+			(c) =>
+				Number.isFinite(c.startSec) &&
+				Number.isFinite(c.endSec) &&
+				c.endSec > c.startSec,
+		);
+}
+
 export async function planEffects({
 	segments,
 	totalDurationSec,
@@ -202,7 +288,7 @@ export async function planEffects({
 	const prompt = buildPlannerPrompt({ segments, totalDurationSec });
 	const raw =
 		auth.mode === "api-key"
-			? await planViaApiKey(prompt, auth.apiKey)
+			? await planViaApiKeySchema(prompt, auth.apiKey, PLAN_SCHEMA)
 			: await planViaClaudeCode(prompt);
 	return sanitizePlan(raw, totalDurationSec);
 }
