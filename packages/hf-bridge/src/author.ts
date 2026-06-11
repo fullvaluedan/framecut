@@ -30,14 +30,21 @@ const PLAN_SCHEMA = {
 	additionalProperties: false,
 } as const;
 
+export interface TokenUsage {
+	inputTokens: number;
+	outputTokens: number;
+}
+
 function buildPlannerPrompt({
 	segments,
 	totalDurationSec,
 	allowedTemplateIds,
+	direction,
 }: {
 	segments: TranscriptSegment[];
 	totalDurationSec: number;
 	allowedTemplateIds?: string[];
+	direction?: string;
 }): string {
 	let catalog = describeTemplateCatalog();
 	if (allowedTemplateIds?.length) {
@@ -67,7 +74,11 @@ ${JSON.stringify(catalog, null, 1)}
 
 TRANSCRIPT:
 ${transcript}
-
+${
+	direction?.trim()
+		? `\nUSER DIRECTION (the editor's own instructions — follow them even when they override the rules above):\n${direction.trim()}\n`
+		: ""
+}
 Respond with ONLY a JSON object: {"items": [{"templateId", "startSec", "durationSec", "variables", "reason"}, ...]}. The "reason" is one short sentence.`;
 }
 
@@ -89,7 +100,7 @@ async function planViaApiKeySchema(
 	prompt: string,
 	apiKey: string,
 	schema: object,
-): Promise<unknown> {
+): Promise<{ raw: unknown; usage: TokenUsage | null }> {
 	const res = await fetch("https://api.anthropic.com/v1/messages", {
 		method: "POST",
 		headers: {
@@ -113,12 +124,21 @@ async function planViaApiKeySchema(
 	}
 	const data = (await res.json()) as {
 		content: { type: string; text?: string }[];
+		usage?: { input_tokens?: number; output_tokens?: number };
 	};
 	const text = data.content.find((b) => b.type === "text")?.text ?? "";
-	return extractJson(text);
+	const usage = data.usage
+		? {
+				inputTokens: data.usage.input_tokens ?? 0,
+				outputTokens: data.usage.output_tokens ?? 0,
+			}
+		: null;
+	return { raw: extractJson(text), usage };
 }
 
-function planViaClaudeCode(prompt: string): Promise<unknown> {
+function planViaClaudeCode(
+	prompt: string,
+): Promise<{ raw: unknown; usage: TokenUsage | null }> {
 	return new Promise((resolve, reject) => {
 		const child = spawn("claude", ["-p", "--output-format", "json"], {
 			shell: true,
@@ -136,9 +156,18 @@ function planViaClaudeCode(prompt: string): Promise<unknown> {
 				return;
 			}
 			try {
-				const wrapper = JSON.parse(out) as { result?: string };
+				const wrapper = JSON.parse(out) as {
+					result?: string;
+					usage?: { input_tokens?: number; output_tokens?: number };
+				};
 				const text = typeof wrapper.result === "string" ? wrapper.result : out;
-				resolve(extractJson(text));
+				const usage = wrapper.usage
+					? {
+							inputTokens: wrapper.usage.input_tokens ?? 0,
+							outputTokens: wrapper.usage.output_tokens ?? 0,
+						}
+					: null;
+				resolve({ raw: extractJson(text), usage });
 			} catch (e) {
 				reject(new Error(`Could not parse claude CLI output: ${String(e)}`));
 			}
@@ -265,7 +294,7 @@ export async function planRepeatCuts({
 }): Promise<RepeatCut[]> {
 	if (!segments.length) return [];
 	const prompt = buildRepeatsPrompt({ segments });
-	const raw =
+	const { raw } =
 		auth.mode === "api-key"
 			? await planViaApiKeySchema(prompt, auth.apiKey, CUTS_SCHEMA)
 			: await planViaClaudeCode(prompt);
@@ -293,24 +322,28 @@ export async function planEffects({
 	totalDurationSec,
 	auth,
 	allowedTemplateIds,
+	direction,
 }: {
 	segments: TranscriptSegment[];
 	totalDurationSec: number;
 	auth: ClaudeAuth;
 	/** Restrict the planner to these template ids (user's panel checkboxes). */
 	allowedTemplateIds?: string[];
-}): Promise<EffectPlan> {
+	/** Free-form instructions from the user's HyperFrames prompt window. */
+	direction?: string;
+}): Promise<EffectPlan & { usage: TokenUsage | null }> {
 	if (!segments.length) {
-		return { items: [] };
+		return { items: [], usage: null };
 	}
 	const prompt = buildPlannerPrompt({
 		segments,
 		totalDurationSec,
 		allowedTemplateIds,
+		direction,
 	});
-	const raw =
+	const { raw, usage } =
 		auth.mode === "api-key"
 			? await planViaApiKeySchema(prompt, auth.apiKey, PLAN_SCHEMA)
 			: await planViaClaudeCode(prompt);
-	return sanitizePlan(raw, totalDurationSec, allowedTemplateIds);
+	return { ...sanitizePlan(raw, totalDurationSec, allowedTemplateIds), usage };
 }

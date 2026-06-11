@@ -17,6 +17,9 @@ export function HyperframesPanel() {
 	const toggleTemplate = useAiSettingsStore((s) => s.toggleTemplate);
 	const styleId = useAiSettingsStore((s) => s.styleId);
 	const setStyleId = useAiSettingsStore((s) => s.setStyleId);
+	const hfDirection = useAiSettingsStore((s) => s.hfDirection);
+	const setHfDirection = useAiSettingsStore((s) => s.setHfDirection);
+	const tokensUsedTotal = useAiSettingsStore((s) => s.tokensUsedTotal);
 	const templates = describeTemplateCatalog();
 	const enabledCount = templates.filter(
 		(t) => !disabledTemplateIds.includes(t.id),
@@ -101,9 +104,26 @@ export function HyperframesPanel() {
 					</div>
 				</div>
 
+				<div>
+					<h3 className="text-sm font-semibold">Direction</h3>
+					<p className="text-muted-foreground mt-1 text-xs">
+						Optional instructions for Claude when it plans your effects —
+						broad changes like &quot;fewer effects, only on key numbers&quot;
+						or &quot;high-energy, punchy titles&quot;.
+					</p>
+					<textarea
+						value={hfDirection}
+						onChange={(e) => setHfDirection(e.target.value)}
+						placeholder="Tell HyperFrames how to edit..."
+						rows={3}
+						className="border-input bg-background mt-2 w-full resize-y rounded-md border p-2 text-xs outline-none focus:ring-1"
+					/>
+				</div>
+
 				<p className="text-muted-foreground text-[0.65rem]">
-					More templates and components are added with each HyperFrames
-					update — new ones start enabled automatically.
+					Claude usage on this device: ~{tokensUsedTotal.toLocaleString()}{" "}
+					tokens. More templates and components are added with each
+					HyperFrames update — new ones start enabled automatically.
 				</p>
 			</div>
 		</ScrollArea>
