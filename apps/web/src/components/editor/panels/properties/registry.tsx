@@ -24,6 +24,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { ElementParamsTab } from "./components/element-params-tab";
 import { ClipEffectsTab, StandaloneEffectTab } from "@/effects/components/effects-tab";
+import { HyperframesTab } from "@/features/ai-generate/components/hyperframes-tab";
 import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
 import { GraphicTab } from "@/graphics/components/graphic-tab";
@@ -235,6 +236,21 @@ function getTextConfig({
 	};
 }
 
+function buildHyperframesTab({
+	element,
+}: {
+	element: VideoElement;
+}): PropertiesTabDef {
+	return {
+		id: "hyperframes",
+		label: "HyperFrames",
+		icon: <HugeiconsIcon icon={MagicWand05Icon} size={16} />,
+		content: ({ trackId }) => (
+			<HyperframesTab element={element} trackId={trackId} />
+		),
+	};
+}
+
 function getVideoConfig({
 	element,
 	mediaAsset,
@@ -243,9 +259,11 @@ function getVideoConfig({
 	mediaAsset: MediaAsset | undefined;
 }): ElementPropertiesConfig {
 	const showAudioTab = mediaAsset?.hasAudio !== false;
+	const isAiGenerated = !!element.framecutAi;
 	return {
-		defaultTab: "transform",
+		defaultTab: isAiGenerated ? "hyperframes" : "transform",
 		tabs: [
+			...(isAiGenerated ? [buildHyperframesTab({ element })] : []),
 			buildTransformTab({ element }),
 			...(showAudioTab ? [buildAudioTab({ element })] : []),
 			buildSpeedTab({ element }),
