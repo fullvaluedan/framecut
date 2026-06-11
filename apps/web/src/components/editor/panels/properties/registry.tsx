@@ -23,20 +23,13 @@ import {
 	DashboardSpeed02Icon,
 } from "@hugeicons/core-free-icons";
 import { ElementParamsTab } from "./components/element-params-tab";
+import { EffectControlsTab } from "./components/effect-controls-tab";
 import { ClipEffectsTab, StandaloneEffectTab } from "@/effects/components/effects-tab";
 import { HyperframesTab } from "@/features/ai-generate/components/hyperframes-tab";
 import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
 import { GraphicTab } from "@/graphics/components/graphic-tab";
 import { OcShapesIcon } from "@/components/icons";
-
-const TRANSFORM_PARAM_KEYS = [
-	"transform.positionX",
-	"transform.positionY",
-	"transform.scaleX",
-	"transform.scaleY",
-	"transform.rotate",
-] as const;
 
 const BLENDING_PARAM_KEYS = ["opacity", "blendMode"] as const;
 const AUDIO_PARAM_KEYS = ["volume", "muted"] as const;
@@ -86,12 +79,7 @@ function buildTransformTab({
 		label: "Transform",
 		icon: <HugeiconsIcon icon={ArrowExpandIcon} size={16} />,
 		content: ({ trackId }) => (
-			<ElementParamsTab
-				element={element}
-				trackId={trackId}
-				paramKeys={TRANSFORM_PARAM_KEYS}
-				sectionKey="transform"
-			/>
+			<EffectControlsTab element={element} trackId={trackId} />
 		),
 	};
 }
