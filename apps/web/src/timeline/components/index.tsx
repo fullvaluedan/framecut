@@ -51,6 +51,7 @@ import {
 	canTrackHaveAudio,
 	canTrackBeHidden,
 	getTimelineZoomMin,
+	getTimelineZoomFit,
 	getTimelinePaddingPx,
 } from "@/timeline";
 import { timelineTimeToPixels } from "@/timeline/pixel-utils";
@@ -439,6 +440,10 @@ export function Timeline() {
 			<TimelineToolbar
 				zoomLevel={zoomLevel}
 				minZoom={minZoomLevel}
+				fitZoom={getTimelineZoomFit({
+					duration: timelineDuration,
+					containerWidth,
+				})}
 				setZoomLevel={({ zoom }) => setZoomLevel(zoom)}
 			/>
 

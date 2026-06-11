@@ -61,10 +61,13 @@ import { toast } from "sonner";
 export function TimelineToolbar({
 	zoomLevel,
 	minZoom,
+	fitZoom,
 	setZoomLevel,
 }: {
 	zoomLevel: number;
 	minZoom: number;
+	/** Zoom at which the timeline content fills the visible width. */
+	fitZoom: number;
 	setZoomLevel: ({ zoom }: { zoom: number }) => void;
 }) {
 	const handleZoom = ({ direction }: { direction: "in" | "out" }) => {
@@ -77,7 +80,7 @@ export function TimelineToolbar({
 
 	useActionHandler("timeline-zoom-in", () => handleZoom({ direction: "in" }), undefined);
 	useActionHandler("timeline-zoom-out", () => handleZoom({ direction: "out" }), undefined);
-	useActionHandler("timeline-zoom-fit", () => setZoomLevel({ zoom: minZoom }), undefined);
+	useActionHandler("timeline-zoom-fit", () => setZoomLevel({ zoom: fitZoom }), undefined);
 
 	return (
 		<ScrollArea className="scrollbar-hidden">
