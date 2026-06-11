@@ -28,13 +28,13 @@ export function Onboarding() {
 	const getStepTitle = () => {
 		switch (step) {
 			case 0:
-				return "Welcome to OpenCut Beta! 🎉";
+				return "Welcome to VibeCut! 🎉";
 			case 1:
 				return "⚠️ This is a super early beta!";
 			case 2:
 				return "🦋 Have fun testing!";
 			default:
-				return "OpenCut Onboarding";
+				return "VibeCut Onboarding";
 		}
 	};
 
@@ -44,8 +44,8 @@ export function Onboarding() {
 				return (
 					<div className="space-y-5">
 						<div className="space-y-3">
-							<Title title="Welcome to OpenCut Beta! 🎉" />
-							<Description description="You're among the first to try OpenCut - the fully open source CapCut alternative." />
+							<Title title="Welcome to VibeCut! 🎉" />
+							<Description description="You're among the first to try VibeCut - the AI-native open source CapCut alternative." />
 						</div>
 						<NextButton onClick={handleNext}>Next</NextButton>
 					</div>
@@ -68,7 +68,7 @@ export function Onboarding() {
 						<div className="space-y-3">
 							<Title title={getStepTitle()} />
 							<Description
-								description={`Join our [Discord](${SOCIAL_LINKS.discord}), chat with cool people and share feedback to help make OpenCut the best editor ever.`}
+								description={`Join our [Discord](${SOCIAL_LINKS.discord}), chat with cool people and share feedback to help make VibeCut the best editor ever.`}
 							/>
 						</div>
 						<NextButton onClick={handleClose}>Finish</NextButton>

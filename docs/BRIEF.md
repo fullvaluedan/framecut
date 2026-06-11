@@ -1,4 +1,4 @@
-# Project Brief: FrameCut (working name)
+# Project Brief: VibeCut (renamed from FrameCut, 2026-06-11, Dan's call)
 ## AI-native video editor — OpenCut fork + HyperFrames generation layer
 
 **Owner:** Dan (fullvaluedan) · **Date:** 2026-06-11 · **Status:** Phase 0 in progress

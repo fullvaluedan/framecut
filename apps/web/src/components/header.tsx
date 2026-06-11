@@ -57,7 +57,7 @@ export function Header() {
 							<Link href="/" className="flex items-center gap-3">
 								<Image
 									src={DEFAULT_LOGO_URL}
-									alt="OpenCut Logo"
+									alt="VibeCut Logo"
 									className="invert dark:invert-0"
 									width={32}
 									height={32}

@@ -1,9 +1,9 @@
 export const SITE_URL = "https://opencut.app";
 
 export const SITE_INFO = {
-	title: "OpenCut",
+	title: "VibeCut",
 	description:
-		"A simple but powerful video editor that gets the job done. In your browser.",
+		"The AI-native video editor: edit, generate, and vibe. In your browser.",
 	url: SITE_URL,
 	openGraphImage: "/open-graph/default.jpg",
 	twitterImage: "/open-graph/default.jpg",
