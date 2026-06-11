@@ -7,7 +7,7 @@
  * row, Scale gets a Uniform Scale checkbox like Premiere's Motion effect.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	getKeyframeAtTime,
 	hasKeyframesForPath,
@@ -18,7 +18,6 @@ import type { AnimationPath } from "@/animation/types";
 import { useElementPlayhead } from "@/components/editor/panels/properties/hooks/use-element-playhead";
 import { useKeyframedParamProperty } from "@/components/editor/panels/properties/hooks/use-keyframed-param-property";
 import { KeyframeToggle } from "@/components/editor/panels/properties/components/keyframe-toggle";
-import { NumberField } from "@/components/ui/number-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useEditor } from "@/editor/use-editor";
 import {
@@ -34,7 +33,12 @@ import {
 import type { TimelineElement, VisualElement } from "@/timeline";
 import type { MediaTime } from "@/wasm";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import {
+	ArrowDown01Icon,
+	ArrowRight01Icon,
+	ArrowTurnBackwardIcon,
+	ArrowUp01Icon,
+} from "@hugeicons/core-free-icons";
 import { cn } from "@/utils/ui";
 
 const POSITION_X = "transform.positionX";
@@ -44,9 +48,8 @@ const SCALE_Y = "transform.scaleY";
 const ROTATE = "transform.rotate";
 const OPACITY = "opacity";
 
-/** Premiere shows values in blue; inputs stay borderless until interaction. */
-const VALUE_FIELD_CLASS =
-	"w-[72px] [&_input]:text-sky-400 [&_input]:font-medium";
+/** Pixels of horizontal drag per display-unit step while scrubbing. */
+const SCRUB_PX_PER_STEP = 2;
 
 interface RowContext {
 	element: VisualElement;
@@ -66,10 +69,23 @@ function formatDisplay(value: number, decimals: number): string {
 	return value.toFixed(decimals);
 }
 
+function paramRange(param: ElementParamDefinition): {
+	minModel?: number;
+	maxModel?: number;
+} {
+	const candidate = param as { min?: number; max?: number };
+	return {
+		minModel: typeof candidate.min === "number" ? candidate.min : undefined,
+		maxModel: typeof candidate.max === "number" ? candidate.max : undefined,
+	};
+}
+
 /**
- * Text-draft wrapper around NumberField: shows resolved value scaled into
- * display units (e.g. scale 1.0 → 100.0) and converts typed/scrubbed input
- * back into model units.
+ * Premiere-style value control. The blue number itself is the drag surface:
+ * click-and-hold then drag left/right to scrub (pointer-locked), release
+ * without moving to type an exact value. Tiny ▲/▼ arrows nudge by one step.
+ * Values display in scaled units (e.g. scale 1.0 → 100.0); writes convert
+ * back to model units and clamp to the param's range.
  */
 function ValueField({
 	resolved,
@@ -78,6 +94,9 @@ function ValueField({
 	suffix,
 	iconLabel,
 	isDefault,
+	step = 1,
+	minModel,
+	maxModel,
 	onPreviewModel,
 	onCommit,
 	onResetModel,
@@ -88,36 +107,168 @@ function ValueField({
 	suffix?: string;
 	iconLabel?: string;
 	isDefault: boolean;
+	/** Increment per arrow click / per few px of drag, in DISPLAY units. */
+	step?: number;
+	minModel?: number;
+	maxModel?: number;
 	onPreviewModel: (modelValue: number) => void;
 	onCommit: () => void;
 	onResetModel?: () => void;
 }) {
-	const [draft, setDraft] = useState<string | null>(null);
-	const display = draft ?? formatDisplay(resolved * factor, decimals);
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState("");
+	const inputRef = useRef<HTMLInputElement>(null);
+	const display = formatDisplay(resolved * factor, decimals);
+
+	useEffect(() => {
+		if (editing) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [editing]);
+
+	const clampModel = (value: number) => {
+		let next = value;
+		if (minModel !== undefined) next = Math.max(minModel, next);
+		if (maxModel !== undefined) next = Math.min(maxModel, next);
+		return next;
+	};
+	const previewDisplay = (displayValue: number) =>
+		onPreviewModel(clampModel(displayValue / factor));
+
+	const nudge = (direction: 1 | -1) => {
+		previewDisplay(resolved * factor + direction * step);
+		onCommit();
+	};
+
+	const startScrub = (event: React.PointerEvent<HTMLElement>) => {
+		if (event.button !== 0 || editing) return;
+		event.preventDefault();
+		const surface = event.currentTarget;
+		const startDisplay = resolved * factor;
+		let cumulative = 0;
+		let scrubbing = false;
+
+		const onMove = (move: PointerEvent) => {
+			cumulative += move.movementX;
+			if (!scrubbing && Math.abs(cumulative) >= 3) {
+				scrubbing = true;
+				// Pointer lock keeps long drags from hitting the screen edge, but
+				// scrubbing must work even where it's unavailable or denied.
+				try {
+					const lock = surface.requestPointerLock?.() as
+						| Promise<void>
+						| undefined;
+					lock?.catch?.(() => undefined);
+				} catch {
+					// keep scrubbing without lock
+				}
+			}
+			if (scrubbing) {
+				previewDisplay(
+					startDisplay + (cumulative / SCRUB_PX_PER_STEP) * step,
+				);
+			}
+		};
+		const onUp = () => {
+			document.removeEventListener("pointermove", onMove);
+			document.removeEventListener("pointerup", onUp);
+			try {
+				if (document.pointerLockElement) document.exitPointerLock();
+			} catch {
+				// lock was never granted
+			}
+			if (scrubbing) {
+				onCommit();
+			} else {
+				// A plain click: switch to typing with the value pre-selected.
+				setDraft(display);
+				setEditing(true);
+			}
+		};
+		document.addEventListener("pointermove", onMove);
+		document.addEventListener("pointerup", onUp);
+	};
 
 	return (
-		<div className={VALUE_FIELD_CLASS}>
-			<NumberField
-				icon={iconLabel ?? ""}
-				value={display}
-				suffix={suffix}
-				dragSensitivity="slow"
-				isDefault={isDefault}
-				onFocus={() => setDraft(formatDisplay(resolved * factor, decimals))}
-				onChange={(e) => {
-					const text = e.target.value;
-					setDraft(text);
-					const parsed = parseFloat(text);
-					if (Number.isFinite(parsed)) onPreviewModel(parsed / factor);
-				}}
-				onBlur={() => {
-					setDraft(null);
-					onCommit();
-				}}
-				onScrub={(v) => onPreviewModel(v / factor)}
-				onScrubEnd={onCommit}
-				onReset={onResetModel}
-			/>
+		<div className="group/value flex items-center gap-0.5">
+			{onResetModel && !isDefault && (
+				<button
+					type="button"
+					title="Reset to default"
+					className="text-muted-foreground hover:text-foreground opacity-0 transition-opacity group-hover/value:opacity-100"
+					onClick={onResetModel}
+				>
+					<HugeiconsIcon icon={ArrowTurnBackwardIcon} size={11} />
+				</button>
+			)}
+			<div className="bg-foreground/5 hover:bg-foreground/10 flex h-6 min-w-[76px] items-center justify-end gap-1 rounded px-1.5">
+				{iconLabel && (
+					<span className="text-muted-foreground select-none text-[10px]">
+						{iconLabel}
+					</span>
+				)}
+				{editing ? (
+					<input
+						ref={inputRef}
+						value={draft}
+						className="w-full min-w-0 bg-transparent text-right text-xs font-medium text-sky-400 outline-none"
+						onChange={(e) => {
+							setDraft(e.target.value);
+							const parsed = parseFloat(e.target.value);
+							if (Number.isFinite(parsed)) previewDisplay(parsed);
+						}}
+						onBlur={() => {
+							setEditing(false);
+							onCommit();
+						}}
+						onKeyDown={(e) => {
+							if (e.key === "Enter" || e.key === "Escape") {
+								e.currentTarget.blur();
+							}
+							if (e.key === "ArrowUp") {
+								e.preventDefault();
+								nudge(1);
+								setDraft(formatDisplay(resolved * factor + step, decimals));
+							}
+							if (e.key === "ArrowDown") {
+								e.preventDefault();
+								nudge(-1);
+								setDraft(formatDisplay(resolved * factor - step, decimals));
+							}
+						}}
+					/>
+				) : (
+					<span
+						className="cursor-ew-resize select-none whitespace-nowrap text-xs font-medium text-sky-400"
+						title="Drag to scrub, click to type"
+						onPointerDown={startScrub}
+					>
+						{display}
+						{suffix ?? ""}
+					</span>
+				)}
+				<div className="flex flex-col">
+					<button
+						type="button"
+						tabIndex={-1}
+						title={`+${step}`}
+						className="text-muted-foreground hover:text-sky-400 flex h-[11px] items-center"
+						onClick={() => nudge(1)}
+					>
+						<HugeiconsIcon icon={ArrowUp01Icon} size={10} />
+					</button>
+					<button
+						type="button"
+						tabIndex={-1}
+						title={`-${step}`}
+						className="text-muted-foreground hover:text-sky-400 flex h-[11px] items-center"
+						onClick={() => nudge(-1)}
+					>
+						<HugeiconsIcon icon={ArrowDown01Icon} size={10} />
+					</button>
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -247,6 +398,7 @@ function SingleRow({
 				decimals={decimals}
 				suffix={suffix}
 				iconLabel={iconLabel}
+				{...paramRange(param)}
 				isDefault={resolvedNumber === defaultNumber}
 				onPreviewModel={(v) => animated.onPreview(v)}
 				onCommit={animated.onCommit}
@@ -394,6 +546,7 @@ function PositionRow({ ctx }: { ctx: RowContext }) {
 				factor={1}
 				decimals={1}
 				iconLabel="X"
+				{...paramRange(paramX)}
 				isDefault={x === paramX.default}
 				onPreviewModel={(v) => previewAxis(paramX, POSITION_X, v)}
 				onCommit={commit}
@@ -407,6 +560,7 @@ function PositionRow({ ctx }: { ctx: RowContext }) {
 				factor={1}
 				decimals={1}
 				iconLabel="Y"
+				{...paramRange(paramY)}
 				isDefault={y === paramY.default}
 				onPreviewModel={(v) => previewAxis(paramY, POSITION_Y, v)}
 				onCommit={commit}
@@ -564,6 +718,7 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 					factor={100}
 					decimals={1}
 					iconLabel="S"
+					{...paramRange(paramY)}
 					isDefault={uniform ? sx === defaultScale && sy === defaultScale : sy === defaultScale}
 					onPreviewModel={(v) => previewScale(v, uniform ? "both" : "y")}
 					onCommit={commit}
@@ -580,6 +735,7 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 						factor={100}
 						decimals={1}
 						iconLabel="W"
+						{...paramRange(paramX)}
 						isDefault={sx === defaultScale}
 						onPreviewModel={(v) => previewScale(v, "x")}
 						onCommit={commit}
