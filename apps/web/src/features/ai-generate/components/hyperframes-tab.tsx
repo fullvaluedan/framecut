@@ -8,7 +8,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { useAiSettingsStore } from "@/features/ai-generate/store";
 import { VIBE_STYLES, getStyleById } from "@/features/ai-generate/styles";
-import { reRenderAiClip } from "@/features/ai-generate/re-render";
+import {
+	reRenderAiClip,
+	reRenderFromCompDir,
+} from "@/features/ai-generate/re-render";
 import {
 	Select,
 	SelectContent,
@@ -89,6 +92,56 @@ export function HyperframesTab({
 	const [templateId, setTemplateId] = useState(ai?.templateId ?? CATALOG[0].id);
 	const [isRendering, setIsRendering] = useState(false);
 	const [isRestyling, setIsRestyling] = useState(false);
+	const [isStudioBusy, setIsStudioBusy] = useState(false);
+	const [isPulling, setIsPulling] = useState(false);
+
+	const openInStudio = async () => {
+		if (!ai) return;
+		setIsStudioBusy(true);
+		const toastId = toast.loading("Starting HyperFrames Studio...");
+		try {
+			const res = await fetch("/api/hyperframes/studio", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ compId: ai.compId }),
+			});
+			if (!res.ok) {
+				const err = (await res.json().catch(() => null)) as { error?: string } | null;
+				throw new Error(err?.error ?? `Studio failed (${res.status})`);
+			}
+			const { url } = (await res.json()) as { url: string };
+			window.open(url, "_blank", "noopener");
+			toast.success("Studio opened in a new tab", {
+				id: toastId,
+				description:
+					'Edit the composition there, then come back and click "Pull changes from Studio".',
+				duration: 8000,
+			});
+		} catch (e) {
+			toast.error("Could not open Studio", {
+				id: toastId,
+				description: e instanceof Error ? e.message : String(e),
+			});
+		} finally {
+			setIsStudioBusy(false);
+		}
+	};
+
+	const pullFromStudio = async () => {
+		setIsPulling(true);
+		const toastId = toast.loading("Re-rendering with your Studio edits...");
+		try {
+			await reRenderFromCompDir({ editor, trackId, element });
+			toast.success("Clip updated with your Studio edits", { id: toastId });
+		} catch (e) {
+			toast.error("Could not pull Studio edits", {
+				id: toastId,
+				description: e instanceof Error ? e.message : String(e),
+			});
+		} finally {
+			setIsPulling(false);
+		}
+	};
 	const styleId = useAiSettingsStore((s) => s.styleId);
 	const setStyleId = useAiSettingsStore((s) => s.setStyleId);
 
@@ -378,6 +431,47 @@ export function HyperframesTab({
 					<p className="text-muted-foreground text-[0.65rem]">
 						Re-renders this clip on your computer (~10–15s) and swaps it in
 						place. Undo restores the previous version.
+					</p>
+				</SectionContent>
+			</Section>
+
+			<Section showTopBorder={false}>
+				<SectionHeader>
+					<SectionTitle className="flex-1">HyperFrames Studio</SectionTitle>
+				</SectionHeader>
+				<SectionContent className="px-3 pb-3 flex flex-col gap-2">
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={isStudioBusy}
+						onClick={() => void openInStudio()}
+					>
+						{isStudioBusy ? (
+							<>
+								<Spinner className="size-3.5" /> Starting Studio...
+							</>
+						) : (
+							"Edit in HyperFrames Studio"
+						)}
+					</Button>
+					<Button
+						variant="outline"
+						size="sm"
+						disabled={isPulling}
+						onClick={() => void pullFromStudio()}
+					>
+						{isPulling ? (
+							<>
+								<Spinner className="size-3.5" /> Re-rendering...
+							</>
+						) : (
+							"Pull changes from Studio"
+						)}
+					</Button>
+					<p className="text-muted-foreground text-[0.65rem]">
+						Studio opens this clip's full composition in a new tab — the same
+						editing windows as HyperFrames Studio. When you're done, pull the
+						changes to re-render the clip in place.
 					</p>
 				</SectionContent>
 			</Section>

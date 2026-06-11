@@ -12,6 +12,68 @@ import { getTemplate } from "@framecut/hf-bridge/templates";
 import type { EditorCore } from "@/core";
 import type { VideoElement } from "@/timeline";
 
+/**
+ * Re-renders the clip's comp dir exactly as it is on disk — pulls in any
+ * edits made in HyperFrames Studio — and swaps the media in place.
+ */
+export async function reRenderFromCompDir({
+	editor,
+	trackId,
+	element,
+}: {
+	editor: EditorCore;
+	trackId: string;
+	element: VideoElement;
+}): Promise<void> {
+	const ai = element.framecutAi;
+	if (!ai) throw new Error("Not an AI-generated clip");
+
+	const project = editor.project.getActive();
+	const fps = Math.round(frameRateToFloat(project.settings.fps)) || 30;
+	const res = await fetch("/api/hyperframes/render-comp", {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ compId: ai.compId, fps }),
+	});
+	if (!res.ok) {
+		const err = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(err?.error ?? `Render failed (${res.status})`);
+	}
+	const blob = await res.blob();
+	const file = new File([blob], `hf-${ai.templateId}-studio.webm`, {
+		type: "video/webm",
+	});
+	const [processed] = await processMediaAssets({ files: [file] });
+	if (!processed) throw new Error("Could not process the rendered video");
+
+	const addAsset = new AddMediaAssetCommand({
+		projectId: project.metadata.id,
+		asset: processed,
+	});
+	editor.command.execute({ command: addAsset });
+	const assetId = addAsset.getAssetId();
+	if (!assetId) throw new Error("Could not store the rendered video");
+
+	const renderedDuration = processed.duration
+		? mediaTimeFromSeconds({ seconds: processed.duration })
+		: element.duration;
+	editor.command.execute({
+		command: new UpdateElementsCommand({
+			updates: [
+				{
+					trackId,
+					elementId: element.id,
+					patch: {
+						mediaId: assetId,
+						duration: renderedDuration,
+						sourceDuration: renderedDuration,
+					},
+				},
+			],
+		}),
+	});
+}
+
 export async function reRenderAiClip({
 	editor,
 	trackId,

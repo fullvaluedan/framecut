@@ -161,3 +161,147 @@ export async function renderTemplateJob(job: RenderJob): Promise<RenderOutcome> 
 
 	return { videoPath: outPath, compDir };
 }
+
+/**
+ * Re-renders an EXISTING comp dir exactly as it is on disk — used to pull
+ * edits made in HyperFrames Studio back into the editor. Unlike
+ * renderTemplateJob, nothing is scaffolded or overwritten.
+ */
+export async function renderCompDir({
+	compId,
+	fps,
+}: {
+	compId: string;
+	fps?: number;
+}): Promise<RenderOutcome> {
+	const compDir = path.join(generatedRoot(), compId);
+	if (!existsSync(path.join(compDir, "index.html"))) {
+		throw new Error(`Comp source not found for ${compId} — re-render from the template instead.`);
+	}
+	let effectiveFps = fps;
+	if (!effectiveFps) {
+		try {
+			const meta = JSON.parse(
+				readFileSync(path.join(compDir, "framecut.json"), "utf8"),
+			) as { fps?: number };
+			effectiveFps = meta.fps;
+		} catch {
+			// fall through to default
+		}
+	}
+
+	const cli = resolveHyperframesCli();
+	const outPath = path.join(compDir, "out.webm");
+	const args = [
+		cli,
+		"render",
+		"--format",
+		"webm",
+		"--quality",
+		"standard",
+		"--fps",
+		String(effectiveFps ?? 30),
+		"--output",
+		outPath,
+	];
+	if (existsSync(path.join(compDir, "vars.json"))) {
+		args.push("--variables-file", "vars.json");
+	}
+	const { code, output } = await runNode(args, compDir);
+	if (code !== 0 || !existsSync(outPath)) {
+		throw new Error(
+			`hyperframes render failed (exit ${code}):\n${output.slice(-4000)}`,
+		);
+	}
+	return { videoPath: outPath, compDir };
+}
+
+/**
+ * HyperFrames Studio singleton: serves one comp dir via `hyperframes preview`
+ * so the user can edit it visually. Starting a different comp replaces the
+ * previous server (same port).
+ */
+const STUDIO_PORT = 3217;
+let studio: {
+	compId: string;
+	child: ReturnType<typeof spawn>;
+} | null = null;
+
+async function waitForHttp(url: string, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		try {
+			const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+			if (res.ok || res.status === 404) return true;
+		} catch {
+			// not up yet
+		}
+		await new Promise((r) => setTimeout(r, 500));
+	}
+	return false;
+}
+
+/** The running Studio decides its own project id — ask it instead of guessing. */
+async function resolveStudioUrl(): Promise<string> {
+	try {
+		const res = await fetch(`http://localhost:${STUDIO_PORT}/api/projects`, {
+			signal: AbortSignal.timeout(3000),
+		});
+		const data = (await res.json()) as { projects?: { id: string }[] };
+		const id = data.projects?.[0]?.id;
+		if (id) {
+			return `http://localhost:${STUDIO_PORT}/#project/${encodeURIComponent(id)}`;
+		}
+	} catch {
+		// fall through
+	}
+	return `http://localhost:${STUDIO_PORT}/`;
+}
+
+export async function startStudio({
+	compId,
+}: {
+	compId: string;
+}): Promise<{ url: string }> {
+	const compDir = path.join(generatedRoot(), compId);
+	if (!existsSync(path.join(compDir, "index.html"))) {
+		throw new Error(`Comp source not found for ${compId}`);
+	}
+
+	if (studio && studio.compId === compId && studio.child.exitCode === null) {
+		return { url: await resolveStudioUrl() };
+	}
+	if (studio && studio.child.exitCode === null) {
+		studio.child.kill();
+		studio = null;
+		// Give the old server a moment to release the port.
+		await new Promise((r) => setTimeout(r, 750));
+	}
+
+	const cli = resolveHyperframesCli();
+	const child = spawn(
+		nodeBinary(),
+		[cli, "preview", "--port", String(STUDIO_PORT)],
+		{
+			cwd: compDir,
+			stdio: ["ignore", "pipe", "pipe"],
+			env: { ...process.env, NO_COLOR: "1", BROWSER: "none" },
+			detached: false,
+		},
+	);
+	child.on("error", () => {
+		studio = null;
+	});
+	child.on("close", () => {
+		if (studio?.child === child) studio = null;
+	});
+	studio = { compId, child };
+
+	const up = await waitForHttp(`http://localhost:${STUDIO_PORT}/`, 30000);
+	if (!up) {
+		child.kill();
+		studio = null;
+		throw new Error("HyperFrames Studio did not start within 30s");
+	}
+	return { url: await resolveStudioUrl() };
+}
