@@ -1,6 +1,11 @@
 export * from "./types";
 export { HF_TEMPLATES, getTemplate, describeTemplateCatalog } from "./templates/index";
-export { planEffects, planRepeatCuts, type RepeatCut } from "./author";
+export {
+	planEffects,
+	planRepeatCuts,
+	type RepeatCut,
+	type TokenUsage,
+} from "./author";
 export {
 	renderTemplateJob,
 	renderCompDir,

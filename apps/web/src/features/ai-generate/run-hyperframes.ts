@@ -110,10 +110,16 @@ function claimLane({
 export async function runHyperframes({
 	editor,
 	onProgress,
+	signal,
 }: {
 	editor: EditorCore;
 	onProgress: (p: RunProgress) => void;
-}): Promise<{ placed: number; skipped: string[] }> {
+	/** Abort to stop the run between stages (Stop button). */
+	signal?: AbortSignal;
+}): Promise<{ placed: number; skipped: string[]; tokensUsed: number }> {
+	const throwIfCancelled = () => {
+		if (signal?.aborted) throw new Error("Cancelled");
+	};
 	const project = editor.project.getActive();
 	const projectId = project.metadata.id;
 	const fps = Math.round(frameRateToFloat(project.settings.fps)) || 30;
@@ -156,9 +162,11 @@ export async function runHyperframes({
 		);
 	}
 
+	throwIfCancelled();
+
 	// 2. Ask Claude (the director) for an effect plan, restricted to the
 	// templates checked in the HyperFrames panel.
-	const { disabledTemplateIds } = useAiSettingsStore.getState();
+	const { disabledTemplateIds, hfDirection } = useAiSettingsStore.getState();
 	const allowedTemplateIds = describeTemplateCatalog()
 		.map((t) => t.id)
 		.filter((id) => !disabledTemplateIds.includes(id));
@@ -171,17 +179,28 @@ export async function runHyperframes({
 	const planRes = await fetch("/api/hyperframes/plan", {
 		method: "POST",
 		headers: { "content-type": "application/json", ...buildAiAuthHeaders() },
+		signal,
 		body: JSON.stringify({
 			segments: transcript.segments,
 			totalDurationSec,
 			allowedTemplateIds,
+			direction: hfDirection,
 		}),
 	});
 	if (!planRes.ok) {
 		const err = (await planRes.json().catch(() => null)) as { error?: string } | null;
 		throw new Error(err?.error ?? `Planning failed (${planRes.status})`);
 	}
-	const plan = (await planRes.json()) as { items: PlannedEffect[] };
+	const plan = (await planRes.json()) as {
+		items: PlannedEffect[];
+		usage?: { inputTokens: number; outputTokens: number } | null;
+	};
+	const tokensUsed = plan.usage
+		? plan.usage.inputTokens + plan.usage.outputTokens
+		: 0;
+	if (tokensUsed > 0) {
+		useAiSettingsStore.getState().addTokensUsed(tokensUsed);
+	}
 	if (!plan.items.length) {
 		throw new Error("Claude found no moments that need an effect. Try longer footage.");
 	}
@@ -210,6 +229,7 @@ export async function runHyperframes({
 	plan.items.sort((a, b) => a.startSec - b.startSec);
 
 	for (let i = 0; i < plan.items.length; i++) {
+		throwIfCancelled();
 		const item = plan.items[i];
 		onProgress({
 			stage: "rendering",
@@ -222,6 +242,7 @@ export async function runHyperframes({
 			const renderRes = await fetch("/api/hyperframes/render", {
 				method: "POST",
 				headers: { "content-type": "application/json" },
+				signal,
 				body: JSON.stringify({
 					templateId: item.templateId,
 					durationSec: item.durationSec,
@@ -262,6 +283,8 @@ export async function runHyperframes({
 			);
 		}
 	}
+
+	throwIfCancelled();
 
 	if (rendered.length) {
 		onProgress({
@@ -338,5 +361,5 @@ export async function runHyperframes({
 	}
 
 	onProgress({ stage: "done", detail: `Placed ${placed} effects.` });
-	return { placed, skipped };
+	return { placed, skipped, tokensUsed };
 }

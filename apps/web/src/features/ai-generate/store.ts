@@ -27,6 +27,12 @@ interface AiSettingsStore {
 	 */
 	disabledTemplateIds: string[];
 	toggleTemplate: (id: string) => void;
+	/** Free-form planner instructions from the HyperFrames prompt window. */
+	hfDirection: string;
+	setHfDirection: (direction: string) => void;
+	/** Lifetime Claude token usage from HyperFrames runs on this device. */
+	tokensUsedTotal: number;
+	addTokensUsed: (tokens: number) => void;
 }
 
 export const useAiSettingsStore = create<AiSettingsStore>()(
@@ -50,6 +56,15 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 					disabledTemplateIds: state.disabledTemplateIds.includes(id)
 						? state.disabledTemplateIds.filter((t) => t !== id)
 						: [...state.disabledTemplateIds, id],
+				})),
+
+			hfDirection: "",
+			setHfDirection: (hfDirection) => set({ hfDirection }),
+
+			tokensUsedTotal: 0,
+			addTokensUsed: (tokens) =>
+				set((state) => ({
+					tokensUsedTotal: state.tokensUsedTotal + Math.max(0, tokens),
 				})),
 		}),
 		{

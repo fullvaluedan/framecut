@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -22,25 +22,35 @@ import { cn } from "@/utils/ui";
 export function RunHyperframesButton() {
 	const editor = useEditor();
 	const [progress, setProgress] = useState<RunProgress | null>(null);
+	const abortRef = useRef<AbortController | null>(null);
 	const isRunning =
 		progress !== null && progress.stage !== "done" && progress.stage !== "error";
 
 	const handleRun = async () => {
 		if (isRunning) return;
+		const controller = new AbortController();
+		abortRef.current = controller;
 		try {
 			const result = await runHyperframes({
 				editor,
 				onProgress: setProgress,
+				signal: controller.signal,
 			});
 			if (result.placed > 0) {
+				const tokenNote = result.tokensUsed
+					? `Used ~${result.tokensUsed.toLocaleString()} Claude tokens.`
+					: "";
 				toast.success(
 					`HyperFrames placed ${result.placed} effect${result.placed === 1 ? "" : "s"} on the timeline`,
 					result.skipped.length
 						? {
-								description: `${result.skipped.length} skipped: ${result.skipped[0]}`,
+								description:
+									`${result.skipped.length} skipped: ${result.skipped[0]} ${tokenNote}`.trim(),
 								duration: 10000,
 							}
-						: undefined,
+						: tokenNote
+							? { description: tokenNote, duration: 8000 }
+							: undefined,
 				);
 			} else {
 				toast.error("HyperFrames could not place any effects", {
@@ -53,9 +63,18 @@ export function RunHyperframesButton() {
 			}
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
-			toast.error("HyperFrames run failed", { description: message });
-			setProgress({ stage: "error", detail: message });
+			if (message === "Cancelled" || abortRef.current?.signal.aborted) {
+				toast.info("HyperFrames run stopped", {
+					description:
+						"Anything already rendered is in your media bin; nothing was placed.",
+				});
+				setProgress(null);
+			} else {
+				toast.error("HyperFrames run failed", { description: message });
+				setProgress({ stage: "error", detail: message });
+			}
 		} finally {
+			abortRef.current = null;
 			setTimeout(() => setProgress(null), 1500);
 		}
 	};
@@ -135,6 +154,17 @@ export function RunHyperframesButton() {
 							: "RUN HYPERFRAMES"}
 					</Button>
 				</TooltipTrigger>
+				{isRunning && (
+					<Button
+						variant="destructive"
+						size="sm"
+						className="ml-1 rounded-sm px-2"
+						title="Stop this HyperFrames run"
+						onClick={() => abortRef.current?.abort()}
+					>
+						Stop
+					</Button>
+				)}
 				<TooltipContent className="max-w-72">
 					{isRunning && progress ? (
 						<div className="flex w-56 flex-col gap-1.5">
