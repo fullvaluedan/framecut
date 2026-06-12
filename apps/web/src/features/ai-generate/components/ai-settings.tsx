@@ -22,6 +22,7 @@ import {
 	type AiBackend,
 } from "@/features/ai-generate/store";
 import { usePreferenceStore } from "@/features/ai-generate/preference-store";
+import { useTranscriptStatusStore } from "@/features/transcription/transcript-cache";
 import { Switch } from "@/components/ui/switch";
 
 const AUTH_MODE_LABELS: Record<AiAuthMode, string> = {
@@ -125,10 +126,48 @@ export function AiSettingsContent() {
 				</SectionContent>
 			</Section>
 
+			<BackgroundTranscriptionSection />
+
 			<IntegrationsSection />
 
 			<SelfLearningSection />
 		</div>
+	);
+}
+
+function BackgroundTranscriptionSection() {
+	const enabled = useAiSettingsStore((s) => s.backgroundTranscriptionEnabled);
+	const setEnabled = useAiSettingsStore(
+		(s) => s.setBackgroundTranscriptionEnabled,
+	);
+	const status = useTranscriptStatusStore((s) => s.status);
+
+	return (
+		<Section showTopBorder={false}>
+			<SectionHeader className="justify-between">
+				<SectionTitle className="flex-1">Background transcription</SectionTitle>
+				<div className="flex items-center p-1">
+					<Switch checked={enabled} onCheckedChange={setEnabled} />
+				</div>
+			</SectionHeader>
+			<SectionContent className="px-3 pb-3 flex flex-col gap-1.5">
+				<p className="text-muted-foreground text-xs">
+					Transcribes the timeline a few seconds after it changes, so AI CUT
+					and RUN HYPERFRAMES start instantly from a cached transcript
+					instead of re-listening to your video. Cached on this device.
+				</p>
+				{enabled && (
+					<p className="text-muted-foreground text-xs">
+						Status:{" "}
+						{status === "ready"
+							? "transcript ready for the current timeline."
+							: status === "transcribing"
+								? "transcribing in the background..."
+								: "waiting for timeline audio."}
+					</p>
+				)}
+			</SectionContent>
+		</Section>
 	);
 }
 

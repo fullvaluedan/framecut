@@ -53,7 +53,11 @@ export function GraphicTab({
 		localTime,
 	});
 
-	const shapeParams = definition.params.filter((p) => p.group !== "stroke");
+	// Internal pen geometry is not a user-facing setting (edit the shape by
+	// redrawing it); everything else renders like Effect Controls values.
+	const shapeParams = definition.params.filter(
+		(p) => p.group !== "stroke" && p.key !== "points",
+	);
 	const hasStrokeParams = definition.params.some((p) => p.group === "stroke");
 
 	return (

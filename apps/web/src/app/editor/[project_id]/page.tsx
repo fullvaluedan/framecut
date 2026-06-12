@@ -40,6 +40,7 @@ import {
 	bookmarkNotesPreviewOverlay,
 	getBookmarkPreviewOverlaySource,
 } from "@/timeline/bookmarks/index";
+import { BackgroundTranscriber } from "@/features/transcription/background-transcriber";
 
 export default function Editor() {
 	const params = useParams();
@@ -57,6 +58,7 @@ export default function Editor() {
 					<Onboarding />
 					<MigrationDialog />
 					<ChangelogNotification />
+					<BackgroundTranscriber />
 				</div>
 			</EditorProvider>
 		</MobileGate>
@@ -273,7 +275,9 @@ function MaximizablePanel({
 					? "bg-background fixed inset-2 z-50 shadow-2xl"
 					: "size-full") +
 				(isActive && !isMaximized
-					? " rounded-sm ring-1 ring-primary/40"
+					? // Premiere's active-panel highlight, but unmissable: a bright
+						// ring with an outer glow around the whole panel.
+						" rounded-sm ring-2 ring-primary shadow-[0_0_16px_4px_var(--tw-shadow-color)] shadow-primary/40"
 					: "")
 			}
 			onMouseEnter={() => setHovered(id)}

@@ -22,6 +22,9 @@ interface AiSettingsStore {
 	/** SerpAPI key — unlocks "find b-roll" in the assistant prompt box. */
 	serpApiKey: string;
 	setSerpApiKey: (key: string) => void;
+	/** Transcribe the timeline in the background so AI runs start instantly. */
+	backgroundTranscriptionEnabled: boolean;
+	setBackgroundTranscriptionEnabled: (enabled: boolean) => void;
 	backend: AiBackend;
 	setBackend: (backend: AiBackend) => void;
 	/** Active VibeStyle id — colors all new AI generations. */
@@ -67,6 +70,10 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 
 			serpApiKey: "",
 			setSerpApiKey: (serpApiKey) => set({ serpApiKey }),
+
+			backgroundTranscriptionEnabled: true,
+			setBackgroundTranscriptionEnabled: (backgroundTranscriptionEnabled) =>
+				set({ backgroundTranscriptionEnabled }),
 
 			backend: "local",
 			setBackend: (backend) => set({ backend }),

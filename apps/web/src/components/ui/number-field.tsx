@@ -169,15 +169,18 @@ function NumberField({
 		const parsed = parseFloat(String(value ?? "0"));
 		startValueRef.current = Number.isNaN(parsed) ? 0 : parsed;
 		cumulativeDeltaRef.current = 0;
-		let hasReceivedFirstMove = false;
-		iconRef.current?.requestPointerLock();
+		// Pointer CAPTURE, not pointer lock: Chromium leaves the cursor
+		// invisible after exitPointerLock until the next click, which read as
+		// "my mouse disappeared" after every scrub.
+		try {
+			iconRef.current?.setPointerCapture(event.pointerId);
+		} catch {
+			// capture is best-effort; document listeners still track the drag
+		}
+		const previousCursor = document.body.style.cursor;
+		document.body.style.cursor = "ew-resize";
 
 		const handlePointerMove = (moveEvent: PointerEvent) => {
-			// first movementX after pointer lock often contains a bogus warp delta
-			if (!hasReceivedFirstMove) {
-				hasReceivedFirstMove = true;
-				return;
-			}
 			cumulativeDeltaRef.current += moveEvent.movementX;
 			const newValue = scrubRanges
 				? scrubAcrossRanges({
@@ -195,7 +198,7 @@ function NumberField({
 		const handlePointerUp = () => {
 			document.removeEventListener("pointermove", handlePointerMove);
 			document.removeEventListener("pointerup", handlePointerUp);
-			document.exitPointerLock();
+			document.body.style.cursor = previousCursor;
 			onScrubEnd?.();
 		};
 
