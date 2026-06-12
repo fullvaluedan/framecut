@@ -359,6 +359,13 @@ function ValueField({
 				const shown = previewDisplay(
 					startDisplay + (cumulative / SCRUB_PX_PER_STEP) * step,
 				);
+				// Don't let the drag distance pile up past a min/max bound —
+				// otherwise the value "sticks" until you drag all the way back.
+				const cumulativeAtShown =
+					((shown - startDisplay) / step) * SCRUB_PX_PER_STEP;
+				if (Math.abs(cumulative - cumulativeAtShown) > SCRUB_PX_PER_STEP) {
+					cumulative = cumulativeAtShown;
+				}
 				setScrubText(formatDisplay(shown, decimals));
 			}
 		};
