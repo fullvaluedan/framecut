@@ -114,6 +114,9 @@ export function buildTextElement({
 		startTime,
 		trimStart: ZERO_MEDIA_TIME,
 		trimEnd: ZERO_MEDIA_TIME,
+		// Motion templates arrive with pre-baked keyframes and their recipe.
+		...(t.animations ? { animations: t.animations } : {}),
+		...(t.motionTemplate ? { motionTemplate: t.motionTemplate } : {}),
 		params: {
 			...buildDefaultElementParams({ type: "text" }),
 			...(t.params ?? {}),

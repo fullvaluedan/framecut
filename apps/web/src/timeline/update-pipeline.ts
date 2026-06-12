@@ -1,4 +1,5 @@
 import { clampAnimationsToDuration } from "@/animation";
+import { retimeTemplateAnimations } from "@/animation/template-retime";
 import {
 	clampRetimeRate,
 	getSourceSpanAtClipTime,
@@ -82,6 +83,30 @@ const deriveRules: ElementUpdateRule[] = [
 ];
 
 const enforceRules: ElementUpdateRule[] = [
+	{
+		// Motion templates: resizing keeps entrances pinned to the start and
+		// slides exit keyframes to the NEW end before the clamp runs.
+		triggers: ["duration"],
+		apply: ({ element, originalElement }) => {
+			if (
+				element.type !== "text" ||
+				!element.motionTemplate ||
+				element.duration === originalElement.duration
+			) {
+				return { element };
+			}
+			return {
+				element: {
+					...element,
+					animations: retimeTemplateAnimations({
+						animations: element.animations,
+						oldDuration: originalElement.duration as number,
+						newDuration: element.duration as number,
+					}),
+				},
+			};
+		},
+	},
 	{
 		triggers: ["duration"],
 		apply: ({ element }) => ({

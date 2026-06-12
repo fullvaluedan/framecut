@@ -4,6 +4,7 @@ import { pathGraphicDefinition } from "./path";
 import { polygonGraphicDefinition } from "./polygon";
 import { rectangleGraphicDefinition } from "./rectangle";
 import { starGraphicDefinition } from "./star";
+import { swissGridGraphicDefinition } from "./swiss-grid";
 
 const defaultGraphicDefinitions = [
 	rectangleGraphicDefinition,
@@ -11,6 +12,7 @@ const defaultGraphicDefinitions = [
 	polygonGraphicDefinition,
 	starGraphicDefinition,
 	pathGraphicDefinition,
+	swissGridGraphicDefinition,
 ];
 
 export function registerDefaultGraphics(): void {
@@ -31,5 +33,6 @@ export {
 	polygonGraphicDefinition,
 	rectangleGraphicDefinition,
 	starGraphicDefinition,
+	swissGridGraphicDefinition,
 };
 export { STROKE_ALIGN_PARAM } from "./shared";

@@ -7,6 +7,38 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 600;
 
+/**
+ * Hardware H.264 beats libx264 by 3-8x on the burn-in re-encode. Probe the
+ * local ffmpeg once and remember the best encoder (NVIDIA → Intel → AMD →
+ * software). A failed hardware encode falls back to libx264 per request.
+ */
+let cachedEncoder: { args: string[]; name: string } | null = null;
+const SOFTWARE_ENCODER = {
+	name: "libx264",
+	args: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"],
+};
+
+async function resolveEncoder(): Promise<{ args: string[]; name: string }> {
+	if (cachedEncoder) return cachedEncoder;
+	const listed = await new Promise<string>((resolve) => {
+		const child = spawn("ffmpeg", ["-hide_banner", "-encoders"], {
+			stdio: ["ignore", "pipe", "pipe"],
+		});
+		let out = "";
+		child.stdout.on("data", (d) => (out += d.toString()));
+		child.on("error", () => resolve(""));
+		child.on("close", () => resolve(out));
+	});
+	const candidates: Array<{ name: string; args: string[] }> = [
+		{ name: "h264_nvenc", args: ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "19"] },
+		{ name: "h264_qsv", args: ["-c:v", "h264_qsv", "-global_quality", "19"] },
+		{ name: "h264_amf", args: ["-c:v", "h264_amf", "-quality", "balanced", "-rc", "cqp", "-qp_i", "19", "-qp_p", "21"] },
+	];
+	cachedEncoder =
+		candidates.find((c) => listed.includes(` ${c.name} `)) ?? SOFTWARE_ENCODER;
+	return cachedEncoder;
+}
+
 interface OverlaySpec {
 	/** Form field name holding the overlay file (e.g. "overlay_0"). */
 	field: string;
@@ -74,19 +106,15 @@ export async function POST(req: NextRequest) {
 		}
 
 		const outPath = path.join(dir, "out.mp4");
-		args.push(
+		const buildArgs = (encoderArgs: string[]) => [
+			...args,
 			"-filter_complex",
 			filters.join(";"),
 			"-map",
 			prevLabel,
 			"-map",
 			"0:a?",
-			"-c:v",
-			"libx264",
-			"-preset",
-			"veryfast",
-			"-crf",
-			"18",
+			...encoderArgs,
 			"-pix_fmt",
 			"yuv420p",
 			"-c:a",
@@ -94,11 +122,11 @@ export async function POST(req: NextRequest) {
 			"-movflags",
 			"+faststart",
 			outPath,
-		);
+		];
 
-		const result = await new Promise<{ code: number; log: string }>(
-			(resolve, reject) => {
-				const child = spawn("ffmpeg", args, {
+		const runFfmpeg = (fullArgs: string[]) =>
+			new Promise<{ code: number; log: string }>((resolve, reject) => {
+				const child = spawn("ffmpeg", fullArgs, {
 					stdio: ["ignore", "pipe", "pipe"],
 				});
 				let log = "";
@@ -106,8 +134,15 @@ export async function POST(req: NextRequest) {
 				child.stderr.on("data", (d) => (log += d.toString()));
 				child.on("error", reject);
 				child.on("close", (code) => resolve({ code: code ?? 1, log }));
-			},
-		);
+			});
+
+		const encoder = await resolveEncoder();
+		let result = await runFfmpeg(buildArgs(encoder.args));
+		if (result.code !== 0 && encoder.name !== SOFTWARE_ENCODER.name) {
+			// Listed hardware encoders can still fail at runtime (driver/session
+			// limits) — software is the always-works fallback.
+			result = await runFfmpeg(buildArgs(SOFTWARE_ENCODER.args));
+		}
 		if (result.code !== 0) {
 			return NextResponse.json(
 				{ error: `ffmpeg composite failed: ${result.log.slice(-800)}` },
