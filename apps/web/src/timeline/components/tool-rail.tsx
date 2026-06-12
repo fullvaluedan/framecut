@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { usePlaceToolStore } from "@/preview/place-tool-store";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+	ArrowRight04Icon,
 	Bookmark02Icon,
 	Cursor01Icon,
 	PenTool03Icon,
@@ -45,6 +46,18 @@ export function TimelineToolRail() {
 				icon: Cursor01Icon,
 				active: tool === null,
 				onClick: () => setTool(null),
+			})}
+			{railButton({
+				title:
+					"Track Select Forward (A) — click the timeline to select everything to the right; Shift+click for one track",
+				icon: ArrowRight04Icon,
+				active: tool?.kind === "track-select-forward",
+				onClick: () =>
+					setTool(
+						tool?.kind === "track-select-forward"
+							? null
+							: { kind: "track-select-forward" },
+					),
 			})}
 			{railButton({
 				title: "Razor — split the selected clip at the playhead",

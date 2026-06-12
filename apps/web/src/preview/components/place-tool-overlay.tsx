@@ -41,7 +41,8 @@ export function PlaceToolOverlay({
 	useEffect(() => {
 		if (tool?.kind !== "pen") setPenPoints([]);
 	}, [tool]);
-	if (!tool) return null;
+	// Track Select Forward acts on the timeline, not the preview canvas.
+	if (!tool || tool.kind === "track-select-forward") return null;
 
 	/**
 	 * Premiere behavior: drawing with a video/image/graphic clip selected cuts

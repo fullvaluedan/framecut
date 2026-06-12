@@ -21,6 +21,8 @@ import {
 	type AiAuthMode,
 	type AiBackend,
 } from "@/features/ai-generate/store";
+import { usePreferenceStore } from "@/features/ai-generate/preference-store";
+import { Switch } from "@/components/ui/switch";
 
 const AUTH_MODE_LABELS: Record<AiAuthMode, string> = {
 	"claude-code": "Claude subscription (Claude Code)",
@@ -122,6 +124,61 @@ export function AiSettingsContent() {
 					</p>
 				</SectionContent>
 			</Section>
+
+			<SelfLearningSection />
 		</div>
+	);
+}
+
+function SelfLearningSection() {
+	const enabled = usePreferenceStore((s) => s.selfLearningEnabled);
+	const setEnabled = usePreferenceStore((s) => s.setSelfLearningEnabled);
+	const templateStats = usePreferenceStore((s) => s.templateStats);
+	const cutStats = usePreferenceStore((s) => s.cutStats);
+	const clearLearning = usePreferenceStore((s) => s.clearLearning);
+	const notes = usePreferenceStore.getState().buildPreferenceNotes();
+	const observedCount =
+		Object.keys(templateStats).length + Object.keys(cutStats).length;
+
+	return (
+		<Section showTopBorder={false}>
+			<SectionHeader className="justify-between">
+				<SectionTitle className="flex-1">Self-learning</SectionTitle>
+				<div className="flex items-center p-1">
+					<Switch checked={enabled} onCheckedChange={setEnabled} />
+				</div>
+			</SectionHeader>
+			<SectionContent className="px-3 pb-3 flex flex-col gap-2">
+				<p className="text-muted-foreground text-xs">
+					VibeCut watches how you react to AI output — effects you delete,
+					AI CUT passes you undo — and tells the AI about it on the next run.
+					Everything stays on this device.
+				</p>
+				{enabled && notes.length > 0 && (
+					<ul className="text-muted-foreground flex list-disc flex-col gap-1 pl-4 text-xs">
+						{notes.map((note) => (
+							<li key={note}>{note}</li>
+						))}
+					</ul>
+				)}
+				{enabled && notes.length === 0 && (
+					<p className="text-muted-foreground text-xs italic">
+						{observedCount > 0
+							? "Observing your edits — no strong preferences learned yet."
+							: "Nothing learned yet — run HyperFrames or AI CUT, then keep or undo the result."}
+					</p>
+				)}
+				{observedCount > 0 && (
+					<Button
+						variant="outline"
+						size="sm"
+						className="self-start text-xs"
+						onClick={clearLearning}
+					>
+						Clear learning
+					</Button>
+				)}
+			</SectionContent>
+		</Section>
 	);
 }

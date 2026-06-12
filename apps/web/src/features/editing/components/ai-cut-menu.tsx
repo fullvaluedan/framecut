@@ -17,6 +17,7 @@ import {
 	runRemoveRepeats,
 } from "@/features/editing/remove-repeats";
 import { runAutocut } from "@/features/editing/autocut";
+import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ScissorIcon } from "@hugeicons/core-free-icons";
 
@@ -46,6 +47,8 @@ export function AiCutMenu() {
 				onProgress: setStage,
 				signal: controller.signal,
 			});
+			// Self-learning: a quick Ctrl+Z after this run counts against it.
+			usePreferenceStore.getState().noteCutRun(label);
 			if (cuts === 0) {
 				toast.info(`${label}: nothing to cut`, { id: toastId });
 			} else {

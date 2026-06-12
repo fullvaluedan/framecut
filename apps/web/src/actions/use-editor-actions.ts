@@ -22,6 +22,10 @@ import { useKeyframeSelection } from "@/timeline/hooks/element/use-keyframe-sele
 import { getElementsAtTime, hasMediaId } from "@/timeline";
 import { cancelInteraction } from "@/editor/cancel-interaction";
 import { invokeAction } from "@/actions";
+import { toast } from "sonner";
+import { useGapSelectionStore } from "@/timeline/gap-selection-store";
+import { usePlaceToolStore } from "@/preview/place-tool-store";
+import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { canToggleSourceAudio } from "@/timeline/audio-separation";
 import {
 	activateScope,
@@ -283,6 +287,8 @@ export function useEditorActions() {
 	useActionHandler(
 		"delete-selected",
 		() => {
+			// A selected gap (clicked between two clips) ripple-deletes first.
+			if (rippleDeleteSelectedGap()) return;
 			// With nothing selected, Delete closes the timeline gap under the
 			// playhead (click a gap to park the playhead there, then Delete).
 			const closeGapAtPlayhead = () => {
@@ -316,6 +322,17 @@ export function useEditorActions() {
 						closeGapAtPlayhead();
 						return;
 					}
+					// Self-learning: deleting AI effects is a "didn't like it"
+					// signal for those templates.
+					usePreferenceStore.getState().noteTemplatesDeleted(
+						editor.timeline
+							.getElementsWithTracks({ elements: selectedElements })
+							.flatMap(({ element }) =>
+								element.type === "video" && element.framecutAi
+									? [element.framecutAi.templateId]
+									: [],
+							),
+					);
 					editor.timeline.deleteElements({
 						elements: selectedElements,
 					});
@@ -388,6 +405,18 @@ export function useEditorActions() {
 	useActionHandler(
 		"cancel-interaction",
 		() => {
+			// Escape clears a selected gap and disarms the forward-select tool
+			// before falling through to the usual cancel/deselect chain.
+			const gapStore = useGapSelectionStore.getState();
+			if (gapStore.gap) {
+				gapStore.setGap(null);
+				return;
+			}
+			const toolStore = usePlaceToolStore.getState();
+			if (toolStore.tool?.kind === "track-select-forward") {
+				toolStore.setTool(null);
+				return;
+			}
 			if (!cancelInteraction()) {
 				invokeAction("deselect-all");
 			}
@@ -464,11 +493,44 @@ export function useEditorActions() {
 	useActionHandler("go-to-previous-edit", () => goToEdit("prev"), undefined);
 	useActionHandler("go-to-next-edit", () => goToEdit("next"), undefined);
 
+	// Premiere gap ripple delete: with a gap selected, Delete removes the
+	// gap's span on every track — unless clips on another track overlap the
+	// span, in which case it's blocked (exactly Premiere's rule).
+	const rippleDeleteSelectedGap = (): boolean => {
+		const { gap, setGap } = useGapSelectionStore.getState();
+		if (!gap || selectedElements.length > 0) return false;
+		const tracks = editor.scenes.getActiveScene().tracks;
+		const blocking = [tracks.main, ...tracks.overlay, ...tracks.audio]
+			.filter((track) => track.id !== gap.trackId)
+			.flatMap((track) =>
+				track.elements.filter(
+					(el) =>
+						(el.startTime as number) < gap.end &&
+						el.startTime + el.duration > gap.start,
+				),
+			);
+		if (blocking.length > 0) {
+			toast.error("Ripple delete blocked", {
+				description:
+					"A clip on another track overlaps this gap (Premiere blocks this too). Use Close Gaps to close what's common to all tracks.",
+			});
+			return true;
+		}
+		editor.command.execute({
+			command: new RemoveRangesCommand({
+				ranges: [{ start: gap.start, end: gap.end }],
+			}),
+		});
+		setGap(null);
+		return true;
+	};
+
 	// Premiere Shift+Delete: remove the selection's time span on every track
 	// and pull everything after it left — one undo step.
 	useActionHandler(
 		"ripple-delete",
 		() => {
+			if (rippleDeleteSelectedGap()) return;
 			if (selectedElements.length === 0) return;
 			const withTracks = editor.timeline.getElementsWithTracks({
 				elements: selectedElements,
@@ -507,21 +569,18 @@ export function useEditorActions() {
 		undefined,
 	);
 
-	// Premiere A (Track Select Forward): everything from the playhead on.
+	// Premiere A: arms the Track Select Forward TOOL — click the timeline to
+	// select everything to the right (Shift+click = single track). Pressing A
+	// again (or Escape) returns to the selection tool.
 	useActionHandler(
 		"track-select-forward",
 		() => {
-			const now = editor.playback.getCurrentTime();
-			const tracks = editor.scenes.getActiveScene().tracks;
-			const refs = [tracks.main, ...tracks.overlay, ...tracks.audio].flatMap(
-				(track) =>
-					(track.elements as { id: string; startTime: number; duration: number }[])
-						.filter((el) => el.startTime + el.duration > now)
-						.map((el) => ({ trackId: track.id, elementId: el.id })),
+			const { tool, setTool } = usePlaceToolStore.getState();
+			setTool(
+				tool?.kind === "track-select-forward"
+					? null
+					: { kind: "track-select-forward" },
 			);
-			if (refs.length) {
-				editor.selection.setSelectedElements({ elements: refs });
-			}
 		},
 		undefined,
 	);
@@ -576,6 +635,9 @@ export function useEditorActions() {
 	useActionHandler(
 		"undo",
 		() => {
+			// Self-learning: undoing right after an AI CUT pass means it was
+			// too aggressive — remember that.
+			usePreferenceStore.getState().noteUndo();
 			editor.command.undo();
 		},
 		undefined,

@@ -10,6 +10,7 @@ import { extractTimelineAudio } from "@/media/mediabunny";
 import { transcriptionService } from "@/services/transcription/service";
 import { DEFAULT_TRANSCRIPTION_SAMPLE_RATE } from "@/transcription/audio";
 import { buildAiAuthHeaders } from "@/features/ai-generate/store";
+import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { TICKS_PER_SECOND } from "@/wasm";
 import type { EditorCore } from "@/core";
 
@@ -85,7 +86,11 @@ export async function runRemoveRepeats({
 		method: "POST",
 		headers: { "content-type": "application/json", ...buildAiAuthHeaders() },
 		signal,
-		body: JSON.stringify({ segments: transcript.segments, mode }),
+		body: JSON.stringify({
+			segments: transcript.segments,
+			mode,
+			preferences: usePreferenceStore.getState().buildPreferenceNotes(),
+		}),
 	});
 	if (!res.ok) {
 		const err = (await res.json().catch(() => null)) as { error?: string } | null;

@@ -8,7 +8,10 @@ import { create } from "zustand";
 export type PlaceTool =
 	| { kind: "text" }
 	| { kind: "shape"; definitionId: string }
-	| { kind: "pen" };
+	| { kind: "pen" }
+	// Premiere's Track Select Forward (A): click the timeline to select
+	// everything to the right; Shift+click limits it to the clicked track.
+	| { kind: "track-select-forward" };
 
 interface PlaceToolStore {
 	tool: PlaceTool | null;

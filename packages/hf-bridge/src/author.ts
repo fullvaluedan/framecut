@@ -35,16 +35,25 @@ export interface TokenUsage {
 	outputTokens: number;
 }
 
+function buildPreferencesBlock(preferences?: string[]): string {
+	if (!preferences?.length) return "";
+	return `\nUSER PREFERENCES (learned from this user's past edits — respect them):\n${preferences
+		.map((p) => `- ${p}`)
+		.join("\n")}\n`;
+}
+
 function buildPlannerPrompt({
 	segments,
 	totalDurationSec,
 	allowedTemplateIds,
 	direction,
+	preferences,
 }: {
 	segments: TranscriptSegment[];
 	totalDurationSec: number;
 	allowedTemplateIds?: string[];
 	direction?: string;
+	preferences?: string[];
 }): string {
 	let catalog = describeTemplateCatalog();
 	if (allowedTemplateIds?.length) {
@@ -74,7 +83,7 @@ ${JSON.stringify(catalog, null, 1)}
 
 TRANSCRIPT:
 ${transcript}
-${
+${buildPreferencesBlock(preferences)}${
 	direction?.trim()
 		? `\nUSER DIRECTION (the editor's own instructions — follow them even when they override the rules above):\n${direction.trim()}\n`
 		: ""
@@ -265,9 +274,11 @@ export interface RepeatCut {
 function buildCutsPrompt({
 	segments,
 	mode,
+	preferences,
 }: {
 	segments: TranscriptSegment[];
 	mode: "repeats" | "cleanup";
+	preferences?: string[];
 }): string {
 	const transcript = segments
 		.map((s) => `[${s.start.toFixed(2)}–${s.end.toFixed(2)}] ${s.text.trim()}`)
@@ -294,7 +305,7 @@ ${goal}
 
 TRANSCRIPT:
 ${transcript}
-
+${buildPreferencesBlock(preferences)}
 Respond with ONLY JSON: {"cuts": [{"startSec", "endSec", "reason"}, ...]}.`;
 }
 
@@ -302,14 +313,17 @@ export async function planRepeatCuts({
 	segments,
 	auth,
 	mode = "repeats",
+	preferences,
 }: {
 	segments: TranscriptSegment[];
 	auth: ClaudeAuth;
 	/** "repeats" = retakes only; "cleanup" = retakes + stutters + tangents. */
 	mode?: "repeats" | "cleanup";
+	/** Self-learning notes from the user's past edits. */
+	preferences?: string[];
 }): Promise<RepeatCut[]> {
 	if (!segments.length) return [];
-	const prompt = buildCutsPrompt({ segments, mode });
+	const prompt = buildCutsPrompt({ segments, mode, preferences });
 	const { raw } =
 		auth.mode === "api-key"
 			? await planViaApiKeySchema(prompt, auth.apiKey, CUTS_SCHEMA)
@@ -339,6 +353,7 @@ export async function planEffects({
 	auth,
 	allowedTemplateIds,
 	direction,
+	preferences,
 }: {
 	segments: TranscriptSegment[];
 	totalDurationSec: number;
@@ -347,6 +362,8 @@ export async function planEffects({
 	allowedTemplateIds?: string[];
 	/** Free-form instructions from the user's HyperFrames prompt window. */
 	direction?: string;
+	/** Self-learning notes from the user's past edits. */
+	preferences?: string[];
 }): Promise<EffectPlan & { usage: TokenUsage | null }> {
 	if (!segments.length) {
 		return { items: [], usage: null };
@@ -356,6 +373,7 @@ export async function planEffects({
 		totalDurationSec,
 		allowedTemplateIds,
 		direction,
+		preferences,
 	});
 	const { raw, usage } =
 		auth.mode === "api-key"

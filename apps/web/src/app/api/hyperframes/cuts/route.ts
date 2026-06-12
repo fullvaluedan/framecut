@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
 	const body = (await req.json()) as {
 		segments: TranscriptSegment[];
 		mode?: "repeats" | "cleanup";
+		preferences?: string[];
 	};
 	if (!Array.isArray(body.segments)) {
 		return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
@@ -38,6 +39,11 @@ export async function POST(req: NextRequest) {
 			segments: body.segments,
 			auth,
 			mode: body.mode === "cleanup" ? "cleanup" : "repeats",
+			preferences: Array.isArray(body.preferences)
+				? body.preferences
+						.filter((p) => typeof p === "string")
+						.slice(0, 20)
+				: undefined,
 		});
 		return NextResponse.json({ cuts });
 	} catch (e) {

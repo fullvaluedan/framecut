@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
 		totalDurationSec: number;
 		allowedTemplateIds?: string[];
 		direction?: string;
+		preferences?: string[];
 	};
 	if (!Array.isArray(body.segments) || !Number.isFinite(body.totalDurationSec)) {
 		return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
@@ -48,6 +49,11 @@ export async function POST(req: NextRequest) {
 				typeof body.direction === "string"
 					? body.direction.slice(0, 2000)
 					: undefined,
+			preferences: Array.isArray(body.preferences)
+				? body.preferences
+						.filter((p) => typeof p === "string")
+						.slice(0, 20)
+				: undefined,
 		});
 		return NextResponse.json(plan);
 	} catch (e) {
