@@ -23,6 +23,7 @@ import { generateUUID } from "@/utils/id";
 import { buildAiAuthHeaders, useAiSettingsStore } from "@/features/ai-generate/store";
 import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { getStyleById } from "@/features/ai-generate/styles";
+import { getMotionTemplate } from "@/features/motion-templates/templates";
 import { describeTemplateCatalog } from "@framecut/hf-bridge/templates";
 
 export interface RunProgress {
@@ -232,6 +233,49 @@ export async function runHyperframes({
 	const groupId = generateUUID();
 	const skipped: string[] = [];
 	let placed = 0;
+
+	// 3a. Instant engine: place native motion-template elements directly —
+	// no Chrome render, no media import, fully editable afterwards, and
+	// nothing for ffmpeg to burn in at export.
+	if (useAiSettingsStore.getState().hfEngine === "native") {
+		onProgress({
+			stage: "placing",
+			detail: "Placing instant effects...",
+			effectIndex: plan.items.length,
+			effectCount: plan.items.length,
+		});
+		const canvasSize = editor.project.getActive().settings.canvasSize;
+		plan.items.sort((a, b) => a.startSec - b.startSec);
+		const commands: InsertElementCommand[] = [];
+		const placedTemplateIds: string[] = [];
+		for (const item of plan.items) {
+			const template = getMotionTemplate(item.templateId);
+			if (!template) {
+				skipped.push(`${item.templateId}: no native version yet`);
+				continue;
+			}
+			const elements = template.build({
+				startTime: mediaTimeFromSeconds({ seconds: item.startSec }),
+				durationSec: item.durationSec,
+				variables: item.variables,
+				accent: String(item.variables.accent ?? themeAccent),
+				canvasSize,
+				groupId,
+				fromAi: true,
+			});
+			for (const element of elements) {
+				commands.push(
+					new InsertElementCommand({ element, placement: { mode: "auto" } }),
+				);
+			}
+			placedTemplateIds.push(item.templateId);
+		}
+		if (commands.length) {
+			editor.command.execute({ command: new BatchCommand(commands) });
+		}
+		usePreferenceStore.getState().noteTemplatesPlaced(placedTemplateIds);
+		return { placed: placedTemplateIds.length, skipped, tokensUsed };
+	}
 
 	// Rendering takes minutes — the user may click around (even into another
 	// scene) while it runs. Collect everything first, place at the end.

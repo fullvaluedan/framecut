@@ -3,6 +3,7 @@ import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
 import { useEditor } from "@/editor/use-editor";
 import { DEFAULTS } from "@/timeline/defaults";
 import { buildTextElement } from "@/timeline/element-utils";
+import { MotionTemplatesSection } from "@/features/motion-templates/components/motion-templates-section";
 import type { MediaTime } from "@/wasm";
 
 export function TextView() {
@@ -42,6 +43,7 @@ export function TextView() {
 				onAddToTimeline={handleAddToTimeline}
 				shouldShowLabel={false}
 			/>
+			<MotionTemplatesSection />
 		</PanelView>
 	);
 }

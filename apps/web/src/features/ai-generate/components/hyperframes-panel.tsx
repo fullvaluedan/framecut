@@ -338,6 +338,45 @@ function ShowcaseSection({
 	);
 }
 
+function EngineSection() {
+	const engine = useAiSettingsStore((s) => s.hfEngine);
+	const setEngine = useAiSettingsStore((s) => s.setHfEngine);
+	return (
+		<div className="flex flex-col gap-1.5 px-3 pt-1 pb-2">
+			<p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+				Effect engine
+			</p>
+			<div className="bg-foreground/5 flex rounded-md p-0.5">
+				{(
+					[
+						["native", "Instant (native)"],
+						["cinematic", "Cinematic (render)"],
+					] as const
+				).map(([value, label]) => (
+					<button
+						key={value}
+						type="button"
+						className={cn(
+							"flex-1 rounded px-2 py-1 text-xs transition-colors",
+							engine === value
+								? "bg-background font-medium shadow-sm"
+								: "text-muted-foreground hover:text-foreground",
+						)}
+						onClick={() => setEngine(value)}
+					>
+						{label}
+					</button>
+				))}
+			</div>
+			<p className="text-muted-foreground text-[10px] leading-snug">
+				{engine === "native"
+					? "Places editable motion-template elements instantly — exports at full speed."
+					: "Renders each effect with HyperFrames (~real time per effect) and burns them in at export."}
+			</p>
+		</div>
+	);
+}
+
 export function HyperframesPanel() {
 	const disabledTemplateIds = useAiSettingsStore((s) => s.disabledTemplateIds);
 	const toggleTemplate = useAiSettingsStore((s) => s.toggleTemplate);
@@ -430,6 +469,7 @@ export function HyperframesPanel() {
 			}
 		>
 			<div className="flex flex-col gap-1 pb-4">
+				<EngineSection />
 				<ShowcaseSection
 					onApply={({ templateIds, direction, title }) => {
 						const allIds = describeTemplateCatalog().map((t) => t.id);

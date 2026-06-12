@@ -25,6 +25,13 @@ interface AiSettingsStore {
 	/** Transcribe the timeline in the background so AI runs start instantly. */
 	backgroundTranscriptionEnabled: boolean;
 	setBackgroundTranscriptionEnabled: (enabled: boolean) => void;
+	/**
+	 * RUN HYPERFRAMES effect engine: "native" places instant, fully editable
+	 * motion-template elements; "cinematic" renders each effect with the
+	 * HyperFrames CLI (slower, burned in at export).
+	 */
+	hfEngine: "native" | "cinematic";
+	setHfEngine: (engine: "native" | "cinematic") => void;
 	backend: AiBackend;
 	setBackend: (backend: AiBackend) => void;
 	/** Active VibeStyle id — colors all new AI generations. */
@@ -74,6 +81,9 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 			backgroundTranscriptionEnabled: true,
 			setBackgroundTranscriptionEnabled: (backgroundTranscriptionEnabled) =>
 				set({ backgroundTranscriptionEnabled }),
+
+			hfEngine: "native",
+			setHfEngine: (hfEngine) => set({ hfEngine }),
 
 			backend: "local",
 			setBackend: (backend) => set({ backend }),

@@ -148,6 +148,16 @@ export interface TextElement extends BaseTimelineElement {
 	type: "text";
 	hidden?: boolean;
 	effects?: Effect[];
+	/**
+	 * VibeCut: set on native motion-template elements (drop-in or AI-placed).
+	 * Carries the recipe so resizing re-bakes entrance/exit keyframes and the
+	 * AI lane logic recognizes its own clips.
+	 */
+	motionTemplate?: {
+		templateId: string;
+		groupId: string;
+		variables: Record<string, string | number | boolean>;
+	};
 }
 
 export interface StickerElement extends BaseTimelineElement {
