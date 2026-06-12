@@ -8,6 +8,7 @@ import { useContainerSize } from "@/hooks/use-container-size";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { AiOverlayPreviewLayer } from "@/features/ai-generate/components/overlay-preview-layer";
+import { PlaceToolOverlay } from "./place-tool-overlay";
 import { TICKS_PER_SECOND } from "@/wasm";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import { buildScene } from "@/services/renderer/scene-builder";
@@ -334,6 +335,12 @@ function PreviewCanvas({
 							>
 								<AiOverlayPreviewLayer />
 							</div>
+								<PlaceToolOverlay
+									sceneLeft={viewport.sceneLeft}
+									sceneTop={viewport.sceneTop}
+									sceneWidth={viewport.sceneWidth}
+									sceneHeight={viewport.sceneHeight}
+								/>
 								<PreviewOverlayLayer
 									instances={overlayInstances}
 									plane="under-interaction"

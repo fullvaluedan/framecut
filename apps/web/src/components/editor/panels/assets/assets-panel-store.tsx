@@ -5,7 +5,6 @@ import {
 	ArrowRightDoubleIcon,
 	ClosedCaptionIcon,
 	Folder03Icon,
-	Happy01Icon,
 	HeadphonesIcon,
 	MagicWand05Icon,
 	TextIcon,
@@ -14,13 +13,14 @@ import {
 	ColorsIcon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { OcShapesIcon } from "@/components/icons";
 
 export const TAB_KEYS = [
 	"media",
 	"hyperframes",
 	"sounds",
 	"text",
-	"stickers",
+	"shapes",
 	"effects",
 	"transitions",
 	"captions",
@@ -53,9 +53,11 @@ export const tabs = {
 		icon: createHugeiconsIcon({ icon: TextIcon }),
 		label: "Text",
 	},
-	stickers: {
-		icon: createHugeiconsIcon({ icon: Happy01Icon }),
-		label: "Stickers",
+	shapes: {
+		icon: ({ className }: { className?: string }) => (
+			<OcShapesIcon className={className} />
+		),
+		label: "Shapes",
 	},
 	effects: {
 		icon: createHugeiconsIcon({ icon: MagicWand05Icon }),

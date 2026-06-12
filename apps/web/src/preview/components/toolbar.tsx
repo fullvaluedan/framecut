@@ -10,7 +10,9 @@ import {
 	FullScreenIcon,
 	PauseIcon,
 	PlayIcon,
+	TextIcon,
 } from "@hugeicons/core-free-icons";
+import { usePlaceToolStore } from "@/preview/place-tool-store";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -36,6 +38,8 @@ export function PreviewToolbar({
 			<TimecodeDisplay />
 			<PlayPauseButton />
 			<div className="justify-self-end flex items-center gap-2.5">
+				<TextToolButton />
+				<Separator orientation="vertical" className="h-4" />
 				<ZoomSelect />
 				<Separator orientation="vertical" className="h-4" />
 				{/* v0.4.0 */}
@@ -128,6 +132,33 @@ function ZoomSelect() {
 				))}
 			</SelectContent>
 		</Select>
+	);
+}
+
+function TextToolButton() {
+	const tool = usePlaceToolStore((s) => s.tool);
+	const toggleTextTool = usePlaceToolStore((s) => s.toggleTextTool);
+	const setTool = usePlaceToolStore((s) => s.setTool);
+	const isActive = tool?.kind === "text";
+
+	useEffect(() => {
+		if (!tool) return;
+		const onKey = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setTool(null);
+		};
+		document.addEventListener("keydown", onKey);
+		return () => document.removeEventListener("keydown", onKey);
+	}, [tool, setTool]);
+
+	return (
+		<Button
+			variant={isActive ? "secondary" : "text"}
+			size="icon"
+			title="Text tool — click anywhere on the preview to add text (Esc cancels)"
+			onClick={toggleTextTool}
+		>
+			<HugeiconsIcon icon={TextIcon} />
+		</Button>
 	);
 }
 
