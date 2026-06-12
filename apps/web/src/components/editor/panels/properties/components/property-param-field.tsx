@@ -268,7 +268,7 @@ function NumberParamField({
 		<div className="flex w-full items-center gap-1">
 			<div className="min-w-0 flex-1">
 				<NumberField
-					icon={param.shortLabel}
+					icon={param.shortLabel ?? "↔"}
 					value={draft.displayValue}
 					dragSensitivity="slow"
 					isDefault={value === param.default}
