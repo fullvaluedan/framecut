@@ -110,6 +110,14 @@ export const ACTIONS = {
 		description: "Maximize or restore the assets panel",
 		category: "navigation",
 	},
+	"go-to-previous-edit": {
+		description: "Move the playhead to the previous edit point",
+		category: "navigation",
+	},
+	"go-to-next-edit": {
+		description: "Move the playhead to the next edit point",
+		category: "navigation",
+	},
 	"toggle-ripple-editing": {
 		description: "Toggle ripple editing",
 		category: "editing",
@@ -211,6 +219,8 @@ const ACTION_DEFAULT_SHORTCUTS = [
 	["timeline-zoom-fit", ["\\"]],
 	["toggle-panel-maximize", ["`"]],
 	["toggle-bookmark", ["m"]],
+	["go-to-previous-edit", ["up"]],
+	["go-to-next-edit", ["down"]],
 	["select-all", ["ctrl+a"]],
 	["cancel-interaction", ["escape"]],
 	["duplicate-selected", ["ctrl+d"]],

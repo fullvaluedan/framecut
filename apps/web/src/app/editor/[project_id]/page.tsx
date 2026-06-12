@@ -235,9 +235,12 @@ function MaximizablePanel({
 	children: React.ReactNode;
 }) {
 	const setHovered = usePanelMaximizeStore((s) => s.setHovered);
+	const setActive = usePanelMaximizeStore((s) => s.setActive);
+	const active = usePanelMaximizeStore((s) => s.active);
 	const maximized = usePanelMaximizeStore((s) => s.maximized);
 	const setMaximized = usePanelMaximizeStore((s) => s.setMaximized);
 	const isMaximized = maximized === id;
+	const isActive = active === id;
 
 	useActionHandler(
 		"toggle-panel-maximize",
@@ -247,7 +250,9 @@ function MaximizablePanel({
 				if (state.maximized === id) state.setMaximized(null);
 				return;
 			}
-			if ((state.hovered ?? "assets") === id) state.setMaximized(id);
+			if ((state.active ?? state.hovered ?? "assets") === id) {
+				state.setMaximized(id);
+			}
 		},
 		undefined,
 	);
@@ -261,13 +266,18 @@ function MaximizablePanel({
 	}, [isMaximized, setMaximized]);
 
 	return (
+		// eslint-disable-next-line jsx-a11y/no-static-element-interactions -- panel activation surface (Premiere's active-panel model); ` is the keyboard route.
 		<div
 			className={
-				isMaximized
+				(isMaximized
 					? "bg-background fixed inset-2 z-50 shadow-2xl"
-					: "size-full"
+					: "size-full") +
+				(isActive && !isMaximized
+					? " rounded-sm ring-1 ring-primary/40"
+					: "")
 			}
 			onMouseEnter={() => setHovered(id)}
+			onPointerDownCapture={() => setActive(id)}
 		>
 			{children}
 		</div>

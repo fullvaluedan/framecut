@@ -183,16 +183,16 @@ function Preview({
 		);
 	}
 	if (item.previewVideo) {
-		// No (working) poster but a video exists: show it directly.
+		// No (working) poster but a video exists: play it like the demos —
+		// an animated preview beats a name tile every time.
 		return (
 			<video
 				src={item.previewVideo}
 				className={cn(base, "object-cover")}
+				autoPlay
+				loop
 				muted
 				playsInline
-				loop
-				onMouseEnter={(e) => void e.currentTarget.play().catch(() => undefined)}
-				onMouseLeave={(e) => e.currentTarget.pause()}
 			/>
 		);
 	}
