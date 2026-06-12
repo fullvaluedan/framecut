@@ -71,11 +71,14 @@ export class ToggleSourceAudioSeparationCommand extends Command {
 			return;
 		}
 
+		// Link the video and its separated audio so they move/trim together.
+		const linkId = videoElement.linkId ?? generateUUID();
 		const separatedAudioElement = {
 			...buildSeparatedAudioElement({
 				sourceElement: videoElement,
 			}),
 			id: generateUUID(),
+			linkId,
 		};
 		const placementResult = resolveTrackPlacement({
 			tracks: this.savedState,
@@ -106,6 +109,7 @@ export class ToggleSourceAudioSeparationCommand extends Command {
 				trackId: this.params.trackId,
 				elementId: this.params.elementId,
 				isSourceAudioEnabled: false,
+				linkId,
 			}),
 		);
 	}
@@ -125,11 +129,13 @@ function updateSourceAudioEnabled({
 	trackId,
 	elementId,
 	isSourceAudioEnabled,
+	linkId,
 }: {
 	tracks: SceneTracks;
 	trackId: string;
 	elementId: string;
 	isSourceAudioEnabled: boolean;
+	linkId?: string;
 }): SceneTracks {
 	return updateElementInSceneTracks({
 		tracks,
@@ -140,6 +146,7 @@ function updateSourceAudioEnabled({
 		update: (element) => ({
 			...element,
 			isSourceAudioEnabled,
+			...(linkId ? { linkId } : {}),
 		}),
 	});
 }

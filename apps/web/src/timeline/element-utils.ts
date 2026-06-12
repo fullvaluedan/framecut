@@ -117,6 +117,7 @@ export function buildTextElement({
 		// Motion templates arrive with pre-baked keyframes and their recipe.
 		...(t.animations ? { animations: t.animations } : {}),
 		...(t.motionTemplate ? { motionTemplate: t.motionTemplate } : {}),
+		...(t.hidden ? { hidden: true } : {}),
 		params: {
 			...buildDefaultElementParams({ type: "text" }),
 			...(t.params ?? {}),

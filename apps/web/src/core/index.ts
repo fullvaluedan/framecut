@@ -78,6 +78,14 @@ export class EditorCore {
 		if (!EditorCore.instance) {
 			EditorCore.instance = new EditorCore();
 		}
+		if (
+			typeof window !== "undefined" &&
+			process.env.NODE_ENV !== "production"
+		) {
+			// Dev convenience: inspect editor state from the console.
+			(window as unknown as { __vibeEditor?: EditorCore }).__vibeEditor =
+				EditorCore.instance;
+		}
 		return EditorCore.instance;
 	}
 

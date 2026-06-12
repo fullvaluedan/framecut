@@ -21,6 +21,8 @@ import type { FrameRate } from "opencut-wasm";
 import { computeDropTarget } from "@/timeline/components/drop-target";
 import { getMouseTimeFromClientX } from "@/timeline/drag-utils";
 import { generateUUID } from "@/utils/id";
+import { useTimelineStore } from "@/timeline/timeline-store";
+import { expandSelectionWithLinks } from "@/timeline/link-elements";
 import type { SnapPoint } from "@/timeline/snapping";
 import type {
 	DropTarget,
@@ -55,6 +57,7 @@ export interface ElementSelectionApi {
 	getSelected: () => readonly ElementRef[];
 	isSelected: (ref: ElementRef) => boolean;
 	select: (ref: ElementRef) => void;
+	selectMany: (refs: ElementRef[]) => void;
 	handleClick: (args: ElementRef & { isMultiKey: boolean }) => void;
 	clearKeyframeSelection: () => void;
 }
@@ -376,9 +379,17 @@ export class ElementInteractionController {
 			this.deps.selection.handleClick({ ...ref, isMultiKey: true });
 		}
 
-		const selectedElements = this.deps.selection.isSelected(ref)
+		const baseSelected = this.deps.selection.isSelected(ref)
 			? this.deps.selection.getSelected()
 			: [ref];
+		// Linked clips move together by default — Alt drags the one clip only.
+		const selectedElements =
+			!event.altKey && useTimelineStore.getState().linkedSelectionEnabled
+				? expandSelectionWithLinks({
+						refs: [...baseSelected],
+						tracks: this.deps.scene.getTracks(),
+					})
+				: baseSelected;
 
 		this.session = {
 			kind: "pending",
@@ -422,6 +433,18 @@ export class ElementInteractionController {
 			!this.deps.selection.isSelected(ref) ||
 			this.deps.selection.getSelected().length > 1
 		) {
+			// Linked selection: clicking one clip selects its partner too, so
+			// trim/delete/move all act on the pair (Alt = just this clip).
+			if (!event.altKey && useTimelineStore.getState().linkedSelectionEnabled) {
+				const expanded = expandSelectionWithLinks({
+					refs: [ref],
+					tracks: this.deps.scene.getTracks(),
+				});
+				if (expanded.length > 1) {
+					this.deps.selection.selectMany(expanded);
+					return;
+				}
+			}
 			this.deps.selection.select(ref);
 			return;
 		}

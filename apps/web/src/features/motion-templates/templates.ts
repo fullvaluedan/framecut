@@ -12,7 +12,11 @@
  */
 
 import type { ElementAnimations } from "@/animation/types";
-import type { CreateTimelineElement } from "@/timeline";
+import type {
+	CreateTimelineElement,
+	SceneTracks,
+	TextElement,
+} from "@/timeline";
 import { buildTextElement } from "@/timeline/element-utils";
 import { generateUUID } from "@/utils/id";
 import { mediaTimeFromSeconds, ZERO_MEDIA_TIME, type MediaTime } from "@/wasm";
@@ -37,15 +41,40 @@ export interface MotionTemplateArgs {
 	fromAi?: boolean;
 }
 
+/** One editable field surfaced in the Template Controls panel. */
+export interface TemplateField {
+	key: string;
+	label: string;
+	type: "text" | "color" | "enum";
+	options?: { value: string; label: string }[];
+	/** Seed shown when the element has no value yet (color fields fall back
+	 *  to the active style accent when omitted). */
+	default?: string;
+}
+
 export interface MotionTemplate {
 	id: string;
 	name: string;
 	description: string;
 	defaultDurationSec: number;
+	durationRange: { min: number; max: number };
+	/** Editable variables shown in the Template Controls panel. */
+	fields: TemplateField[];
 	build: (args: MotionTemplateArgs) => CreateTimelineElement[];
 }
 
 const DARK_PILL = "#0b0d12";
+
+const CORNER_OPTIONS = [
+	{ value: "top-left", label: "Top left" },
+	{ value: "top-right", label: "Top right" },
+	{ value: "bottom-left", label: "Bottom left" },
+	{ value: "bottom-right", label: "Bottom right" },
+];
+const ALIGN_OPTIONS = [
+	{ value: "left", label: "Left" },
+	{ value: "right", label: "Right" },
+];
 
 function str(variables: TemplateVariables, key: string, fallback: string): string {
 	const value = variables[key];
@@ -59,6 +88,7 @@ function buildTemplateText({
 	durationSec,
 	params,
 	channels,
+	hidden,
 }: {
 	args: MotionTemplateArgs;
 	templateId: string;
@@ -66,11 +96,14 @@ function buildTemplateText({
 	durationSec: number;
 	params: Record<string, string | number | boolean>;
 	channels: TemplateChannels;
+	/** Stable-count templates create some elements hidden until used. */
+	hidden?: boolean;
 }): CreateTimelineElement {
 	const base = buildTextElement({
 		raw: {
 			name: `${args.fromAi ? "AI: " : ""}${label}`,
 			duration: mediaTimeFromSeconds({ seconds: durationSec }),
+			...(hidden ? { hidden: true } : {}),
 			params,
 			motionTemplate: {
 				templateId,
@@ -123,6 +156,18 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		name: "Callout pill",
 		description: "Short phrase in a corner pill",
 		defaultDurationSec: 3,
+		durationRange: { min: 1, max: 10 },
+		fields: [
+			{ key: "text", label: "Text", type: "text", default: "Callout" },
+			{
+				key: "corner",
+				label: "Corner",
+				type: "enum",
+				options: CORNER_OPTIONS,
+				default: "top-right",
+			},
+			{ key: "accent", label: "Text color", type: "color" },
+		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
 			const corner = String(args.variables.corner ?? "top-right");
@@ -143,7 +188,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					content: str(args.variables, "text", "Callout"),
 					fontSize: 34,
 					fontWeight: "bold",
-					color: args.accent,
+					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
 					"transform.positionX": x,
 					"transform.positionY": y,
@@ -163,6 +208,11 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		name: "Kinetic title",
 		description: "Big pop-in title",
 		defaultDurationSec: 3.5,
+		durationRange: { min: 1, max: 10 },
+		fields: [
+			{ key: "text", label: "Title", type: "text", default: "TITLE" },
+			{ key: "color", label: "Text color", type: "color", default: "#ffffff" },
+		],
 		build: (args) => {
 			const channels = popIn({ durationSec: args.durationSec });
 			const element = buildTemplateText({
@@ -174,7 +224,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					content: str(args.variables, "text", "TITLE").toUpperCase(),
 					fontSize: 110,
 					fontWeight: "bold",
-					color: "#ffffff",
+					color: str(args.variables, "color", "#ffffff"),
 					textAlign: "center",
 					letterSpacing: 2,
 				},
@@ -188,6 +238,19 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		name: "Lower third",
 		description: "Name + subtitle bars",
 		defaultDurationSec: 4,
+		durationRange: { min: 1.5, max: 12 },
+		fields: [
+			{ key: "title", label: "Name", type: "text", default: "Name" },
+			{ key: "subtitle", label: "Subtitle", type: "text", default: "Subtitle" },
+			{
+				key: "align",
+				label: "Side",
+				type: "enum",
+				options: ALIGN_OPTIONS,
+				default: "left",
+			},
+			{ key: "accent", label: "Bar color", type: "color" },
+		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
 			const align = String(args.variables.align ?? "left");
@@ -225,7 +288,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					"transform.positionX": x,
 					"transform.positionY": titleY,
 					"background.enabled": true,
-					"background.color": args.accent,
+					"background.color": str(args.variables, "accent", args.accent),
 					"background.cornerRadius": 8,
 					"background.paddingX": 22,
 					"background.paddingY": 10,
@@ -260,6 +323,12 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		name: "Number pop",
 		description: "Huge stat + label",
 		defaultDurationSec: 3,
+		durationRange: { min: 1, max: 10 },
+		fields: [
+			{ key: "value", label: "Number", type: "text", default: "100%" },
+			{ key: "label", label: "Label", type: "text", default: "Label" },
+			{ key: "accent", label: "Number color", type: "color" },
+		],
 		build: (args) => {
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
@@ -280,7 +349,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					content: str(args.variables, "value", "100%"),
 					fontSize: 130,
 					fontWeight: "bold",
-					color: args.accent,
+					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
 					"transform.positionY": -30,
 				},
@@ -308,6 +377,17 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		name: "Section break",
 		description: "Accent bar chapter card",
 		defaultDurationSec: 2.5,
+		durationRange: { min: 1, max: 8 },
+		fields: [
+			{ key: "text", label: "Heading", type: "text", default: "Next chapter" },
+			{
+				key: "kicker",
+				label: "Kicker (small label)",
+				type: "text",
+				default: "",
+			},
+			{ key: "accent", label: "Bar color", type: "color" },
+		],
 		build: (args) => {
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
@@ -343,44 +423,70 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					color: "#0b0d12",
 					textAlign: "center",
 					"background.enabled": true,
-					"background.color": args.accent,
+					"background.color": str(args.variables, "accent", args.accent),
 					"background.cornerRadius": 4,
 					"background.paddingX": 60,
 					"background.paddingY": 18,
 				},
 				channels: mainChannels,
 			});
-			const elements = [main];
-			if (kicker) {
-				const kickerChannels = fadeSlide({
-					durationSec: args.durationSec,
-					baseX: 0,
-					baseY: -110,
-					fromDy: -24,
-					delaySec: 0.1,
-				});
-				const kickerElement = buildTemplateText({
-					args: shared,
-					templateId: "section-break",
-					label: "Section break kicker",
-					durationSec: args.durationSec,
-					params: {
-						content: kicker.toUpperCase(),
-						fontSize: 26,
-						color: "#ffffff",
-						textAlign: "center",
-						letterSpacing: 6,
-						"transform.positionY": -110,
-					},
-					channels: kickerChannels,
-				});
-				elements.push(kickerElement);
-			}
-			return elements;
+			// Always create the kicker element (hidden when empty) so the
+			// element count is stable — the Template Controls editor maps
+			// rebuilt elements onto existing siblings by index.
+			const kickerChannels = fadeSlide({
+				durationSec: args.durationSec,
+				baseX: 0,
+				baseY: -110,
+				fromDy: -24,
+				delaySec: 0.1,
+			});
+			const kickerElement = buildTemplateText({
+				args: shared,
+				templateId: "section-break",
+				label: "Section break kicker",
+				durationSec: args.durationSec,
+				hidden: !kicker,
+				params: {
+					content: (kicker || "Kicker").toUpperCase(),
+					fontSize: 26,
+					color: "#ffffff",
+					textAlign: "center",
+					letterSpacing: 6,
+					"transform.positionY": -110,
+				},
+				channels: kickerChannels,
+			});
+			return [main, kickerElement];
 		},
 	},
 ];
 
 export function getMotionTemplate(id: string): MotionTemplate | undefined {
 	return MOTION_TEMPLATES.find((t) => t.id === id);
+}
+
+/**
+ * All text elements of one template instance (the elements a single build()
+ * produced, sharing motionTemplate.groupId), in track order. The Template
+ * Controls editor maps a rebuilt element[i] onto sibling[i].
+ */
+export function getMotionTemplateGroup({
+	tracks,
+	groupId,
+}: {
+	tracks: SceneTracks;
+	groupId: string;
+}): { trackId: string; element: TextElement }[] {
+	const result: { trackId: string; element: TextElement }[] = [];
+	for (const track of [...tracks.overlay, tracks.main, ...tracks.audio]) {
+		for (const element of track.elements) {
+			if (
+				element.type === "text" &&
+				element.motionTemplate?.groupId === groupId
+			) {
+				result.push({ trackId: track.id, element });
+			}
+		}
+	}
+	return result;
 }

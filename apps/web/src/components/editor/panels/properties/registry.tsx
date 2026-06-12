@@ -24,8 +24,10 @@ import {
 } from "@hugeicons/core-free-icons";
 import { ElementParamsTab } from "./components/element-params-tab";
 import { EffectControlsTab } from "./components/effect-controls-tab";
+import { AudioSyncSection } from "./components/audio-sync-section";
 import { ClipEffectsTab, StandaloneEffectTab } from "@/effects/components/effects-tab";
 import { HyperframesTab } from "@/features/ai-generate/components/hyperframes-tab";
+import { TemplateControlsTab } from "@/features/motion-templates/components/template-controls-tab";
 import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
 import { GraphicTab } from "@/graphics/components/graphic-tab";
@@ -114,12 +116,15 @@ function buildAudioTab({
 		label: "Audio",
 		icon: <HugeiconsIcon icon={MusicNote03Icon} size={16} />,
 		content: ({ trackId }) => (
-			<ElementParamsTab
-				element={element}
-				trackId={trackId}
-				paramKeys={AUDIO_PARAM_KEYS}
-				sectionKey="audio"
-			/>
+			<>
+				<ElementParamsTab
+					element={element}
+					trackId={trackId}
+					paramKeys={AUDIO_PARAM_KEYS}
+					sectionKey="audio"
+				/>
+				<AudioSyncSection element={element} />
+			</>
 		),
 	};
 }
@@ -209,14 +214,31 @@ function buildStandaloneEffectTab({
 	};
 }
 
+function buildTemplateControlsTab({
+	element,
+}: {
+	element: TextElement;
+}): PropertiesTabDef {
+	return {
+		id: "template",
+		label: "Template",
+		icon: <HugeiconsIcon icon={MagicWand05Icon} size={16} />,
+		content: ({ trackId }) => (
+			<TemplateControlsTab element={element} trackId={trackId} />
+		),
+	};
+}
+
 function getTextConfig({
 	element,
 }: {
 	element: TextElement;
 }): ElementPropertiesConfig {
+	const isTemplate = !!element.motionTemplate;
 	return {
-		defaultTab: "text",
+		defaultTab: isTemplate ? "template" : "text",
 		tabs: [
+			...(isTemplate ? [buildTemplateControlsTab({ element })] : []),
 			buildTextTab({ element }),
 			buildTransformTab({ element }),
 			buildBlendingTab({ element }),

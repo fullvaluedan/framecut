@@ -116,6 +116,11 @@ interface BaseTimelineElement {
 	trimEnd: MediaTime;
 	sourceDuration?: MediaTime;
 	animations?: ElementAnimations;
+	/**
+	 * Linked-clip group: a video and the audio separated from it share one
+	 * `linkId`, so they select/move/trim together (Premiere linked selection).
+	 */
+	linkId?: string;
 	params: ParamValues;
 }
 
