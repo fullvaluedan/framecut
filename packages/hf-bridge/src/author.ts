@@ -262,22 +262,35 @@ export interface RepeatCut {
 	reason: string;
 }
 
-function buildRepeatsPrompt({
+function buildCutsPrompt({
 	segments,
+	mode,
 }: {
 	segments: TranscriptSegment[];
+	mode: "repeats" | "cleanup";
 }): string {
 	const transcript = segments
 		.map((s) => `[${s.start.toFixed(2)}–${s.end.toFixed(2)}] ${s.text.trim()}`)
 		.join("\n");
-	return `You are an expert video editor cleaning up a talking-head recording. Below is the transcript with timestamps in seconds.
-
-Find RETAKES: places where the speaker repeats or restarts the same sentence/thought (often after a stumble, filler, or self-correction). For each retake, the LAST attempt is the keeper — return cut ranges that remove the earlier attempt(s), including any stumble between them.
+	const goal =
+		mode === "repeats"
+			? `Find RETAKES: places where the speaker repeats or restarts the same sentence/thought (often after a stumble, filler, or self-correction). For each retake, the LAST attempt is the keeper — return cut ranges that remove the earlier attempt(s), including any stumble between them.
 
 Rules:
-- Only cut clear repeats/restarts of the same content. Do not cut intentional repetition for emphasis.
-- Cut boundaries must align with the transcript timestamps (start of the abandoned attempt to start of the kept attempt).
-- If there are no retakes, return an empty list.
+- Only cut clear repeats/restarts of the same content. Do not cut intentional repetition for emphasis.`
+			: `This is a FULL CLEANUP pass. The goal is a tight, high-quality video. Return cut ranges that remove:
+1. RETAKES — repeated/restarted sentences; the LAST attempt is always the keeper.
+2. STUTTERS & FALSE STARTS — stumbles, abandoned sentence fragments, long filler runs ("um, uh, so, like" chains that carry no content).
+3. OFF-TOPIC TANGENTS — passages clearly irrelevant to the video's main subject (asides to someone off-camera, technical interruptions, "where was I" moments). Infer the main subject from the transcript as a whole.
+
+Rules:
+- Be decisive but conservative with meaning: never cut content that develops the main subject; when in doubt about relevance, keep it.
+- Do not cut intentional repetition for emphasis.`;
+	return `You are an expert video editor cleaning up a talking-head recording. Below is the transcript with timestamps in seconds.
+
+${goal}
+- Cut boundaries must align with the transcript timestamps.
+- If there is nothing to cut, return an empty list.
 
 TRANSCRIPT:
 ${transcript}
@@ -288,12 +301,15 @@ Respond with ONLY JSON: {"cuts": [{"startSec", "endSec", "reason"}, ...]}.`;
 export async function planRepeatCuts({
 	segments,
 	auth,
+	mode = "repeats",
 }: {
 	segments: TranscriptSegment[];
 	auth: ClaudeAuth;
+	/** "repeats" = retakes only; "cleanup" = retakes + stutters + tangents. */
+	mode?: "repeats" | "cleanup";
 }): Promise<RepeatCut[]> {
 	if (!segments.length) return [];
-	const prompt = buildRepeatsPrompt({ segments });
+	const prompt = buildCutsPrompt({ segments, mode });
 	const { raw } =
 		auth.mode === "api-key"
 			? await planViaApiKeySchema(prompt, auth.apiKey, CUTS_SCHEMA)

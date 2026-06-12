@@ -26,12 +26,19 @@ export async function POST(req: NextRequest) {
 			{ status: 401 },
 		);
 	}
-	const body = (await req.json()) as { segments: TranscriptSegment[] };
+	const body = (await req.json()) as {
+		segments: TranscriptSegment[];
+		mode?: "repeats" | "cleanup";
+	};
 	if (!Array.isArray(body.segments)) {
 		return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
 	}
 	try {
-		const cuts = await planRepeatCuts({ segments: body.segments, auth });
+		const cuts = await planRepeatCuts({
+			segments: body.segments,
+			auth,
+			mode: body.mode === "cleanup" ? "cleanup" : "repeats",
+		});
 		return NextResponse.json({ cuts });
 	} catch (e) {
 		return NextResponse.json(

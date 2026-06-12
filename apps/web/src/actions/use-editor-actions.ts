@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useTimelineStore } from "@/timeline/timeline-store";
 import { useActionHandler } from "@/actions/use-action-handler";
 import { CloseGapsCommand } from "@/commands/timeline/track/close-gaps";
+import { RemoveRangesCommand } from "@/commands/timeline/track/remove-ranges";
+import { usePropertiesStore } from "@/components/editor/panels/properties/stores/properties-store";
 import { useEditor } from "@/editor/use-editor";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import {
@@ -241,62 +243,42 @@ export function useEditorActions() {
 		undefined,
 	);
 
-	useActionHandler(
-		"split-left",
-		() => {
-			const currentTime = editor.playback.getCurrentTime();
-			const tracks = editor.scenes.getActiveScene().tracks;
-			const elementsToSplit =
-				selectedElements.length > 0
-					? selectedElements
-					: getElementsAtTime({
-							tracks,
-							time: currentTime,
-						});
-
-			if (elementsToSplit.length === 0) return;
-
-			const rightSideElements = editor.timeline.splitElements({
-				elements: elementsToSplit,
-				splitTime: currentTime,
-				retainSide: "right",
-			});
-
-			if (rippleEditingEnabled && rightSideElements.length > 0) {
-				const firstRightElement = editor.timeline.getElementsWithTracks({
-					elements: [rightSideElements[0]],
-				})[0];
-				if (firstRightElement) {
-					editor.playback.seek({ time: firstRightElement.element.startTime });
-				}
+	// Premiere's Q/W: ripple trim from the previous/next edit point to the
+	// playhead — removes that span on every track and pulls later clips left.
+	const collectEditPoints = (): number[] => {
+		const tracks = editor.scenes.getActiveScene().tracks;
+		const points = new Set<number>([0]);
+		for (const track of [tracks.main, ...tracks.overlay, ...tracks.audio]) {
+			for (const element of track.elements) {
+				points.add(element.startTime);
+				points.add(element.startTime + element.duration);
 			}
-		},
-		undefined,
-	);
-
-	useActionHandler(
-		"split-right",
-		() => {
-			const currentTime = editor.playback.getCurrentTime();
-			const tracks = editor.scenes.getActiveScene().tracks;
-			const elementsToSplit =
-				selectedElements.length > 0
-					? selectedElements
-					: getElementsAtTime({
-							tracks,
-							time: currentTime,
-						});
-
-			if (elementsToSplit.length === 0) return;
-
-			editor.timeline.splitElements({
-				elements: elementsToSplit,
-				splitTime: currentTime,
-				retainSide: "left",
-			});
-		},
-		undefined,
-	);
+		}
+		return [...points].sort((a, b) => a - b);
+	};
+	const rippleTrimToPlayhead = (direction: "previous" | "next") => {
+		const now = editor.playback.getCurrentTime();
+		const points = collectEditPoints();
+		const EPSILON = 2;
+		const boundary =
+			direction === "previous"
+				? [...points].reverse().find((t) => t < now - EPSILON)
+				: points.find((t) => t > now + EPSILON);
+		if (boundary === undefined) return;
+		const range =
+			direction === "previous"
+				? { start: boundary, end: now as number }
+				: { start: now as number, end: boundary };
+		if (range.end - range.start <= EPSILON) return;
+		editor.command.execute({
+			command: new RemoveRangesCommand({ ranges: [range] }),
+		});
+		if (direction === "previous") {
+			editor.playback.seek({ time: range.start as typeof now });
+		}
+	};
+	useActionHandler("split-left", () => rippleTrimToPlayhead("previous"), undefined);
+	useActionHandler("split-right", () => rippleTrimToPlayhead("next"), undefined);
 
 	useActionHandler(
 		"delete-selected",
@@ -481,6 +463,83 @@ export function useEditorActions() {
 	};
 	useActionHandler("go-to-previous-edit", () => goToEdit("prev"), undefined);
 	useActionHandler("go-to-next-edit", () => goToEdit("next"), undefined);
+
+	// Premiere Shift+Delete: remove the selection's time span on every track
+	// and pull everything after it left — one undo step.
+	useActionHandler(
+		"ripple-delete",
+		() => {
+			if (selectedElements.length === 0) return;
+			const withTracks = editor.timeline.getElementsWithTracks({
+				elements: selectedElements,
+			});
+			const ranges = withTracks.map(({ element }) => ({
+				start: element.startTime as number,
+				end: (element.startTime + element.duration) as number,
+			}));
+			if (!ranges.length) return;
+			editor.command.execute({
+				command: new RemoveRangesCommand({ ranges }),
+			});
+		},
+		undefined,
+	);
+
+	// Premiere D: select the clip(s) under the playhead. Unlike split, the
+	// playhead parked on a clip's first frame counts as "on" that clip.
+	useActionHandler(
+		"select-clip-at-playhead",
+		() => {
+			const now = editor.playback.getCurrentTime();
+			const tracks = editor.scenes.getActiveScene().tracks;
+			const hits = [tracks.main, ...tracks.overlay, ...tracks.audio].flatMap(
+				(track) =>
+					track.elements
+						.filter(
+							(el) => now >= el.startTime && now < el.startTime + el.duration,
+						)
+						.map((el) => ({ trackId: track.id, elementId: el.id })),
+			);
+			if (hits.length) {
+				editor.selection.setSelectedElements({ elements: hits });
+			}
+		},
+		undefined,
+	);
+
+	// Premiere A (Track Select Forward): everything from the playhead on.
+	useActionHandler(
+		"track-select-forward",
+		() => {
+			const now = editor.playback.getCurrentTime();
+			const tracks = editor.scenes.getActiveScene().tracks;
+			const refs = [tracks.main, ...tracks.overlay, ...tracks.audio].flatMap(
+				(track) =>
+					(track.elements as { id: string; startTime: number; duration: number }[])
+						.filter((el) => el.startTime + el.duration > now)
+						.map((el) => ({ trackId: track.id, elementId: el.id })),
+			);
+			if (refs.length) {
+				editor.selection.setSelectedElements({ elements: refs });
+			}
+		},
+		undefined,
+	);
+
+	// Premiere Ctrl/Cmd+R: jump to the Speed panel for the selection.
+	useActionHandler(
+		"open-speed-panel",
+		() => {
+			const first = editor.timeline.getElementsWithTracks({
+				elements: selectedElements,
+			})[0];
+			if (!first) return;
+			usePropertiesStore
+				.getState()
+				.setActiveTab({ elementType: first.element.type, tabId: "speed" });
+		},
+		undefined,
+	);
 
 	useActionHandler(
 		"copy-selected",
