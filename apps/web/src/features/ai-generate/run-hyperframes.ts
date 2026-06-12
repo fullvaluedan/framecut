@@ -120,6 +120,22 @@ export async function runHyperframes({
 	const throwIfCancelled = () => {
 		if (signal?.aborted) throw new Error("Cancelled");
 	};
+	/**
+	 * Some stages (model download, transcription, local decode) can't be
+	 * cancelled internally — racing them against the abort signal means
+	 * Stop always returns control immediately, even mid-download.
+	 */
+	const abortable = <T>(promise: Promise<T>): Promise<T> => {
+		if (!signal) return promise;
+		return Promise.race([
+			promise,
+			new Promise<never>((_, reject) => {
+				const onAbort = () => reject(new Error("Cancelled"));
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
+			}),
+		]);
+	};
 	const project = editor.project.getActive();
 	const projectId = project.metadata.id;
 	const fps = Math.round(frameRateToFloat(project.settings.fps)) || 30;
@@ -133,29 +149,49 @@ export async function runHyperframes({
 
 	// 1. Transcribe the timeline's audio (all client-side).
 	onProgress({ stage: "extracting", detail: "Extracting timeline audio..." });
-	const audioBlob = await extractTimelineAudio({
-		tracks: editor.scenes.getActiveScene().tracks,
-		mediaAssets: editor.media.getAssets(),
-		totalDuration,
-	});
-	const { samples } = await decodeAudioToFloat32({
-		audioBlob,
-		sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-	});
-	const transcript = await transcriptionService.transcribe({
-		audioData: samples,
-		onProgress: (p) => {
-			if (p.status === "loading-model") {
-				onProgress({
-					stage: "loading-model",
-					detail: `Downloading speech model (one-time): ${Math.round(p.progress)}%`,
-					progress: p.progress / 100,
-				});
-			} else if (p.status === "transcribing") {
-				onProgress({ stage: "transcribing", detail: "Listening to your video..." });
-			}
-		},
-	});
+	const audioBlob = await abortable(
+		extractTimelineAudio({
+			tracks: editor.scenes.getActiveScene().tracks,
+			mediaAssets: editor.media.getAssets(),
+			totalDuration,
+		}),
+	);
+	const { samples } = await abortable(
+		decodeAudioToFloat32({
+			audioBlob,
+			sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+		}),
+	);
+	const transcript = await abortable(
+		transcriptionService.transcribe({
+			audioData: samples,
+			onProgress: (p) => {
+				if (p.status === "loading-model") {
+					// 100% downloaded but not yet transcribing = the model is
+					// initializing — say so instead of sitting on a full bar.
+					if (p.progress >= 100) {
+						onProgress({
+							stage: "loading-model",
+							detail:
+								"Speech model downloaded — initializing (can take ~30s the first time)...",
+							progress: 1,
+						});
+					} else {
+						onProgress({
+							stage: "loading-model",
+							detail: `Downloading speech model (one-time, ~40 MB): ${Math.round(p.progress)}%`,
+							progress: p.progress / 100,
+						});
+					}
+				} else if (p.status === "transcribing") {
+					onProgress({
+						stage: "transcribing",
+						detail: "Listening to your video...",
+					});
+				}
+			},
+		}),
+	);
 	if (!transcript.segments.length) {
 		throw new Error(
 			"No speech found in the timeline audio — HyperFrames plans effects from the transcript.",

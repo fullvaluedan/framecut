@@ -197,12 +197,12 @@ export const useKeybindingsStore = create<KeybindingsState>()(
 					[ShortcutKey, TActionWithOptionalArgs]
 				>;
 				const merged = new Map(typedEntries);
-				// Adopt defaults for actions added after this map was persisted:
-				// a default is merged in when its key is free AND its action has
-				// no binding at all (so user remaps/removals stay respected).
-				const boundActions = new Set(merged.values());
+				// Adopt defaults added after this map was persisted: any default
+				// whose key is still FREE merges in — additive, so user remaps
+				// keep priority while new shortcuts (Ctrl+K split, Ctrl+L link…)
+				// arrive without resetting the keymap.
 				for (const [key, action] of getDefaultShortcuts()) {
-					if (!merged.has(key) && !boundActions.has(action)) {
+					if (!merged.has(key)) {
 						merged.set(key, action);
 					}
 				}

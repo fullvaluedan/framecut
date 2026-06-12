@@ -113,7 +113,9 @@ export function RunHyperframesButton() {
 			case "extracting":
 				return "Reading audio";
 			case "loading-model":
-				return "Loading speech model";
+				return (progress.progress ?? 0) >= 1
+					? "Initializing speech model"
+					: "Downloading speech model";
 			case "transcribing":
 				return "Transcribing";
 			case "planning":

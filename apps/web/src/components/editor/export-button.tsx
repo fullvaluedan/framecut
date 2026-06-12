@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { TransitionTopIcon } from "@hugeicons/core-free-icons";
@@ -17,7 +17,7 @@ import { cn } from "@/utils/ui";
 import {
 	getExportMimeType,
 	getExportFileExtension,
-	downloadBuffer,
+	saveBufferWithPicker,
 } from "@/export";
 import { Check, Copy, Download, RotateCcw } from "lucide-react";
 import {
@@ -132,7 +132,7 @@ function ExportPopover({
 
 		if (result.success && result.buffer) {
 			// FrameCut AI overlays (alpha WebMs) are excluded from the canvas
-			// render — burn them in with local ffmpeg before downloading.
+			// render â€” burn them in with local ffmpeg before downloading.
 			let buffer = result.buffer;
 			let downloadFormat = format;
 			try {
@@ -151,11 +151,21 @@ function ExportPopover({
 					description: e instanceof Error ? e.message : String(e),
 				});
 			}
-			downloadBuffer({
+			const outcome = await saveBufferWithPicker({
 				buffer,
 				filename: `${activeProject.metadata.name}${getExportFileExtension({ format: downloadFormat })}`,
 				mimeType: getExportMimeType({ format: downloadFormat }),
 			});
+			if (outcome === "saved") {
+				toast.success("Exported", {
+					description:
+						"Saved to your chosen folder â€” next export defaults there.",
+				});
+			} else if (outcome === "cancelled") {
+				toast.info("Export not saved", {
+					description: "The save dialog was cancelled.",
+				});
+			}
 
 			editor.project.clearExportState();
 			onOpenChange(false);
@@ -187,7 +197,7 @@ function ExportPopover({
 								<div className="flex flex-col">
 									<Section
 										collapsible
-										defaultOpen={false}
+										defaultOpen={true}
 										showTopBorder={false}
 									>
 										<SectionHeader>
@@ -218,7 +228,7 @@ function ExportPopover({
 										</SectionContent>
 									</Section>
 
-									<Section collapsible defaultOpen={false}>
+									<Section collapsible defaultOpen={true}>
 										<SectionHeader>
 											<SectionTitle>Quality</SectionTitle>
 										</SectionHeader>
@@ -253,7 +263,7 @@ function ExportPopover({
 										</SectionContent>
 									</Section>
 
-									<Section collapsible defaultOpen={false}>
+									<Section collapsible defaultOpen={true}>
 										<SectionHeader>
 											<SectionTitle>Audio</SectionTitle>
 										</SectionHeader>

@@ -16,42 +16,76 @@ import type { EditorCore } from "@/core";
 export async function runRemoveRepeats({
 	editor,
 	onProgress,
+	signal,
+	mode = "repeats",
 }: {
 	editor: EditorCore;
 	onProgress?: (detail: string) => void;
+	signal?: AbortSignal;
+	/** "repeats" = retakes only; "cleanup" = retakes + stutters + tangents. */
+	mode?: "repeats" | "cleanup";
 }): Promise<{ cuts: number; removedSec: number }> {
+	const abortable = <T>(promise: Promise<T>): Promise<T> => {
+		if (!signal) return promise;
+		return Promise.race([
+			promise,
+			new Promise<never>((_, reject) => {
+				const onAbort = () => reject(new Error("Cancelled"));
+				if (signal.aborted) onAbort();
+				else signal.addEventListener("abort", onAbort, { once: true });
+			}),
+		]);
+	};
 	const totalDuration = editor.timeline.getTotalDuration();
 	if (totalDuration / TICKS_PER_SECOND < 2) {
 		throw new Error("Add some footage to the timeline first.");
 	}
 
-	onProgress?.("Listening to your video...");
-	const audioBlob = await extractTimelineAudio({
-		tracks: editor.scenes.getActiveScene().tracks,
-		mediaAssets: editor.media.getAssets(),
-		totalDuration,
-	});
-	const { samples } = await decodeAudioToFloat32({
-		audioBlob,
-		sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-	});
-	const transcript = await transcriptionService.transcribe({
-		audioData: samples,
-		onProgress: (p) => {
-			if (p.status === "loading-model") {
-				onProgress?.(`Downloading speech model: ${Math.round(p.progress)}%`);
-			}
-		},
-	});
+	onProgress?.("Extracting timeline audio...");
+	const audioBlob = await abortable(
+		extractTimelineAudio({
+			tracks: editor.scenes.getActiveScene().tracks,
+			mediaAssets: editor.media.getAssets(),
+			totalDuration,
+		}),
+	);
+	const { samples } = await abortable(
+		decodeAudioToFloat32({
+			audioBlob,
+			sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
+		}),
+	);
+	onProgress?.("Transcribing...");
+	const transcript = await abortable(
+		transcriptionService.transcribe({
+			audioData: samples,
+			onProgress: (p) => {
+				if (p.status === "loading-model") {
+					onProgress?.(
+						p.progress >= 100
+							? "Initializing speech model..."
+							: `Downloading speech model: ${Math.round(p.progress)}%`,
+					);
+				} else if (p.status === "transcribing") {
+					onProgress?.("Transcribing...");
+				}
+			},
+		}),
+	);
 	if (!transcript.segments.length) {
 		throw new Error("No speech found — repeats are detected from the transcript.");
 	}
 
-	onProgress?.("Claude is finding retakes...");
+	onProgress?.(
+		mode === "cleanup"
+			? "Claude is planning the cleanup..."
+			: "Claude is finding retakes...",
+	);
 	const res = await fetch("/api/hyperframes/cuts", {
 		method: "POST",
 		headers: { "content-type": "application/json", ...buildAiAuthHeaders() },
-		body: JSON.stringify({ segments: transcript.segments }),
+		signal,
+		body: JSON.stringify({ segments: transcript.segments, mode }),
 	});
 	if (!res.ok) {
 		const err = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -73,5 +107,35 @@ export async function runRemoveRepeats({
 	return {
 		cuts: cuts.length,
 		removedSec: cuts.reduce((acc, c) => acc + (c.endSec - c.startSec), 0),
+	};
+}
+
+/**
+ * Full cleanup — Dan's "make it a high-quality video" pass: removes
+ * silences first (audio math), then transcribes the tightened timeline and
+ * has Claude cut stutters, retakes, and off-topic tangents in one go.
+ */
+export async function runFullCleanup({
+	editor,
+	onProgress,
+	signal,
+}: {
+	editor: EditorCore;
+	onProgress?: (detail: string) => void;
+	signal?: AbortSignal;
+}): Promise<{ cuts: number; removedSec: number }> {
+	onProgress?.("Removing silences...");
+	const { runRemoveSilences } = await import("./remove-silences");
+	const silences = await runRemoveSilences({ editor });
+	if (signal?.aborted) throw new Error("Cancelled");
+	const content = await runRemoveRepeats({
+		editor,
+		onProgress,
+		signal,
+		mode: "cleanup",
+	});
+	return {
+		cuts: silences.cuts + content.cuts,
+		removedSec: silences.removedSec + content.removedSec,
 	};
 }
