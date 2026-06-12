@@ -13,6 +13,8 @@ interface TimelineStore {
 	toggleRippleEditing: () => void;
 	videoWaveformsEnabled: boolean;
 	toggleVideoWaveforms: () => void;
+	linkedSelectionEnabled: boolean;
+	toggleLinkedSelection: () => void;
 	expandedElementIds: Set<string>;
 	toggleElementExpanded: (elementId: string) => void;
 }
@@ -42,6 +44,14 @@ export const useTimelineStore = create<TimelineStore>()(
 				}));
 			},
 
+			linkedSelectionEnabled: true,
+
+			toggleLinkedSelection: () => {
+				set((state) => ({
+					linkedSelectionEnabled: !state.linkedSelectionEnabled,
+				}));
+			},
+
 			expandedElementIds: new Set<string>(),
 
 			toggleElementExpanded: (elementId) => {
@@ -62,7 +72,18 @@ export const useTimelineStore = create<TimelineStore>()(
 				snappingEnabled: state.snappingEnabled,
 				rippleEditingEnabled: state.rippleEditingEnabled,
 				videoWaveformsEnabled: state.videoWaveformsEnabled,
+				linkedSelectionEnabled: state.linkedSelectionEnabled,
 			}),
+			version: 1,
+			migrate: (persisted) => {
+				// linkedSelectionEnabled was added later — default it ON for
+				// older persisted stores that predate the field.
+				const p = persisted as Record<string, unknown> | null;
+				if (p && p.linkedSelectionEnabled === undefined) {
+					p.linkedSelectionEnabled = true;
+				}
+				return p as never;
+			},
 		},
 	),
 );

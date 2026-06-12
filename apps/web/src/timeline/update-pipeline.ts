@@ -87,11 +87,14 @@ const enforceRules: ElementUpdateRule[] = [
 		// Motion templates: resizing keeps entrances pinned to the start and
 		// slides exit keyframes to the NEW end before the clamp runs.
 		triggers: ["duration"],
-		apply: ({ element, originalElement }) => {
+		apply: ({ element, originalElement, patch }) => {
 			if (
 				element.type !== "text" ||
 				!element.motionTemplate ||
-				element.duration === originalElement.duration
+				element.duration === originalElement.duration ||
+				// Template Controls supplies coherent, end-pinned animations in
+				// the same patch — don't double-shift them.
+				patch.animations !== undefined
 			) {
 				return { element };
 			}

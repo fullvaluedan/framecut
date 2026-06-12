@@ -320,9 +320,15 @@ function ToolbarRightSection({
 	const videoWaveformsEnabled = useTimelineStore(
 		(s) => s.videoWaveformsEnabled,
 	);
+	const linkedSelectionEnabled = useTimelineStore(
+		(s) => s.linkedSelectionEnabled,
+	);
 	const toggleSnapping = useTimelineStore((s) => s.toggleSnapping);
 	const toggleRippleEditing = useTimelineStore((s) => s.toggleRippleEditing);
 	const toggleVideoWaveforms = useTimelineStore((s) => s.toggleVideoWaveforms);
+	const toggleLinkedSelection = useTimelineStore(
+		(s) => s.toggleLinkedSelection,
+	);
 
 	return (
 		<div className="flex items-center gap-1">
@@ -368,6 +374,13 @@ function ToolbarRightSection({
 					isActive={videoWaveformsEnabled}
 					tooltip="Audio waveforms on video clips"
 					onClick={() => toggleVideoWaveforms()}
+				/>
+
+				<ToolbarButton
+					icon={<HugeiconsIcon icon={Link02Icon} />}
+					isActive={linkedSelectionEnabled}
+					tooltip="Linked selection — move/trim video and its audio together (Alt = just one)"
+					onClick={() => toggleLinkedSelection()}
 				/>
 			</TooltipProvider>
 

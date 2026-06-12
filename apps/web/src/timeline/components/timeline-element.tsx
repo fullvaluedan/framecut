@@ -90,6 +90,7 @@ import { uppercase } from "@/utils/string";
 import { useMemo, type ComponentProps, type ReactNode } from "react";
 import type { SelectedKeyframeRef, ElementKeyframe } from "@/animation/types";
 import { cn } from "@/utils/ui";
+import { computeAvSyncOffset } from "@/timeline/av-sync";
 import { usePropertiesStore } from "@/components/editor/panels/properties/stores/properties-store";
 import { getTrackTypeForElementType } from "@/timeline/placement/compatibility";
 import { useTimelineStore } from "@/timeline/timeline-store";
@@ -415,6 +416,7 @@ export function TimelineElement({
 							onResizeStart={onResizeStart}
 							isDropTarget={isDropTarget}
 						/>
+						<AvSyncBadge element={element} />
 						{isSelected && (
 							<div
 								className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
@@ -1250,6 +1252,29 @@ function TiledMediaContent({
 				hasFade={true}
 			/>
 		</>
+	);
+}
+
+/**
+ * Amber frame-offset badge shown on a clip whose audio/video partner has
+ * drifted out of sync. Hidden when in sync or there is no partner.
+ */
+function AvSyncBadge({ element }: { element: TimelineElementType }) {
+	const tracks = useEditor((e) => e.scenes.getActiveSceneOrNull()?.tracks);
+	const fps = useEditor((e) => e.project.getActiveOrNull()?.settings.fps ?? null);
+	if (!tracks) return null;
+	if (element.type !== "video" && element.type !== "audio") return null;
+	const sync = computeAvSyncOffset({ element, tracks, fps });
+	if (!sync || sync.offsetFrames === 0) return null;
+	const sign = sync.offsetFrames > 0 ? "+" : "";
+	return (
+		<div
+			className="pointer-events-none absolute top-0.5 right-0.5 z-20 rounded bg-amber-500 px-1 py-px text-[0.55rem] font-semibold text-black shadow"
+			title={`Audio is ${Math.abs(sync.offsetFrames)} frame${Math.abs(sync.offsetFrames) === 1 ? "" : "s"} out of sync — Alt-click this clip and use the Audio panel to realign`}
+		>
+			⚠ {sign}
+			{sync.offsetFrames}f
+		</div>
 	);
 }
 
