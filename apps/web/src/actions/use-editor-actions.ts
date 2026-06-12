@@ -457,6 +457,31 @@ export function useEditorActions() {
 		undefined,
 	);
 
+	// Premiere's Up/Down: jump the playhead between edit points (every clip
+	// boundary on every track).
+	const goToEdit = (direction: "prev" | "next") => {
+		const tracks = editor.scenes.getActiveScene().tracks;
+		const points = new Set<number>([0]);
+		for (const track of [tracks.main, ...tracks.overlay, ...tracks.audio]) {
+			for (const element of track.elements) {
+				points.add(element.startTime);
+				points.add(element.startTime + element.duration);
+			}
+		}
+		const sorted = [...points].sort((a, b) => a - b);
+		const now = editor.playback.getCurrentTime();
+		const EPSILON_TICKS = 2;
+		const target =
+			direction === "next"
+				? sorted.find((t) => t > now + EPSILON_TICKS)
+				: [...sorted].reverse().find((t) => t < now - EPSILON_TICKS);
+		if (target !== undefined) {
+			editor.playback.seek({ time: target as typeof now });
+		}
+	};
+	useActionHandler("go-to-previous-edit", () => goToEdit("prev"), undefined);
+	useActionHandler("go-to-next-edit", () => goToEdit("next"), undefined);
+
 	useActionHandler(
 		"copy-selected",
 		() => {

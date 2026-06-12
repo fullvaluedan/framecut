@@ -40,6 +40,12 @@ export function useEdgeAutoScroll({
 
 			const viewportRect = rulerViewport.getBoundingClientRect();
 			const mouseX = getMouseClientX();
+			// Drag-state transitions briefly report mouseX 0, which sits inside
+			// the left edge zone and caused spurious scroll bursts mid-drag.
+			if (mouseX <= 0) {
+				rafRef.current = requestAnimationFrame(step);
+				return;
+			}
 			const mouseXRelative = mouseX - viewportRect.left;
 
 			const viewportWidth = rulerViewport.clientWidth;

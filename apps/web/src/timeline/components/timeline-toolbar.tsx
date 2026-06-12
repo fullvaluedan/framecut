@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useEditor } from "@/editor/use-editor";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import {
@@ -80,7 +81,23 @@ export function TimelineToolbar({
 
 	useActionHandler("timeline-zoom-in", () => handleZoom({ direction: "in" }), undefined);
 	useActionHandler("timeline-zoom-out", () => handleZoom({ direction: "out" }), undefined);
-	useActionHandler("timeline-zoom-fit", () => setZoomLevel({ zoom: fitZoom }), undefined);
+	// Premiere's \: first press fits the whole timeline, second press
+	// returns to the zoom you were working at.
+	const preFitZoomRef = useRef<number | null>(null);
+	useActionHandler(
+		"timeline-zoom-fit",
+		() => {
+			const isAtFit = Math.abs(zoomLevel - fitZoom) / fitZoom < 0.02;
+			if (isAtFit && preFitZoomRef.current !== null) {
+				setZoomLevel({ zoom: preFitZoomRef.current });
+				preFitZoomRef.current = null;
+				return;
+			}
+			preFitZoomRef.current = zoomLevel;
+			setZoomLevel({ zoom: fitZoom });
+		},
+		undefined,
+	);
 
 	return (
 		<ScrollArea className="scrollbar-hidden">
