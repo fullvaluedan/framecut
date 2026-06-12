@@ -18,7 +18,14 @@ import type { AnimationPath } from "@/animation/types";
 import { useElementPlayhead } from "@/components/editor/panels/properties/hooks/use-element-playhead";
 import { useKeyframedParamProperty } from "@/components/editor/panels/properties/hooks/use-keyframed-param-property";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { useEditor } from "@/editor/use-editor";
+import { UpdateElementsCommand } from "@/commands/timeline/element/update-elements";
+import {
+	balanceTimelineAudio,
+	enhanceClipAudio,
+} from "@/features/editing/audio-enhance";
 import {
 	coerceParamValue,
 	getParamChannelLayout,
@@ -49,6 +56,8 @@ const SCALE_X = "transform.scaleX";
 const SCALE_Y = "transform.scaleY";
 const ROTATE = "transform.rotate";
 const OPACITY = "opacity";
+const VOLUME = "volume";
+const MUTED = "muted";
 
 /** Pixels of horizontal drag per display-unit step while scrubbing. */
 const SCRUB_PX_PER_STEP = 2;
@@ -851,6 +860,110 @@ function ScaleRows({ ctx }: { ctx: RowContext }) {
 	);
 }
 
+/** Mute checkbox row (Premiere's Channel Volume "Bypass" equivalent). */
+function MuteRow({ ctx }: { ctx: RowContext }) {
+	const { element, trackId } = ctx;
+	const editor = useEditor();
+	const param = findParam(element, MUTED);
+	if (!param) return null;
+	const muted = readElementParamValue({ element, param }) === true;
+	const setMuted = (next: boolean) => {
+		editor.command.execute({
+			command: new UpdateElementsCommand({
+				updates: [
+					{
+						trackId,
+						elementId: element.id,
+						patch: {
+							params: {
+								...("params" in element ? element.params : {}),
+								muted: next,
+							},
+						} as Partial<TimelineElement>,
+					},
+				],
+			}),
+		});
+	};
+	return (
+		<Row label="">
+			<label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/75">
+				<Checkbox
+					checked={muted}
+					onCheckedChange={(checked) => setMuted(checked === true)}
+				/>
+				Mute
+			</label>
+		</Row>
+	);
+}
+
+/** One-click loudness tools: enhance this clip / balance the whole timeline. */
+function AudioToolsRow({ ctx }: { ctx: RowContext }) {
+	const { element, trackId } = ctx;
+	const editor = useEditor();
+	const [busy, setBusy] = useState<string | null>(null);
+
+	const run = async (label: string, fn: () => Promise<string>) => {
+		if (busy) return;
+		setBusy(label);
+		const toastId = toast.loading(`${label}...`);
+		try {
+			const message = await fn();
+			toast.success(message, {
+				id: toastId,
+				description: "Ctrl+Z restores the previous levels.",
+			});
+		} catch (e) {
+			toast.error(`${label} failed`, {
+				id: toastId,
+				description: e instanceof Error ? e.message : String(e),
+			});
+		} finally {
+			setBusy(null);
+		}
+	};
+
+	return (
+		<div className="flex flex-col gap-1.5 py-1 pl-7 pr-2">
+			<Button
+				variant="outline"
+				size="sm"
+				disabled={!!busy}
+				onClick={() =>
+					void run("Enhance audio", async () => {
+						const { volumeDb } = await enhanceClipAudio({
+							editor,
+							trackId,
+							element,
+						});
+						return `Enhanced — level set to ${volumeDb.toFixed(1)} dB`;
+					})
+				}
+			>
+				{busy === "Enhance audio" ? "Enhancing..." : "Enhance audio"}
+			</Button>
+			<Button
+				variant="outline"
+				size="sm"
+				disabled={!!busy}
+				onClick={() =>
+					void run("Balance all clips", async () => {
+						const { adjusted } = await balanceTimelineAudio({ editor });
+						return `Balanced ${adjusted} clip${adjusted === 1 ? "" : "s"} to the same loudness`;
+					})
+				}
+			>
+				{busy === "Balance all clips" ? "Balancing..." : "Balance all clips"}
+			</Button>
+			<p className="text-muted-foreground text-[0.65rem]">
+				Enhance levels this clip's speech to a dialog target; Balance evens
+				out every clip on the timeline.
+			</p>
+		</div>
+	);
+}
+
 export function EffectControlsTab({
 	element,
 	trackId,
@@ -895,6 +1008,21 @@ export function EffectControlsTab({
 					iconLabel="O"
 				/>
 			</FxGroup>
+			{findParam(element, VOLUME) && (
+				<FxGroup title="Audio">
+					<SingleRow
+						ctx={ctx}
+						paramKey={VOLUME}
+						label="Level"
+						factor={1}
+						decimals={1}
+						suffix=" dB"
+						iconLabel="♪"
+					/>
+					<MuteRow ctx={ctx} />
+					<AudioToolsRow ctx={ctx} />
+				</FxGroup>
+			)}
 			<p className="text-muted-foreground px-1 pt-2 text-[0.65rem]">
 				Drag a blue value to scrub it, click to type. The diamond sets a
 				keyframe at the playhead — open the clip's keyframe lanes on the
