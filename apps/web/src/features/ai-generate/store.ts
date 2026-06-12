@@ -27,6 +27,12 @@ interface AiSettingsStore {
 	 */
 	disabledTemplateIds: string[];
 	toggleTemplate: (id: string) => void;
+	/**
+	 * Registry asset names UNCHECKED in the Effects-tab HyperFrames browser
+	 * (deny-list, like disabledTemplateIds).
+	 */
+	disabledHfAssets: string[];
+	toggleHfAsset: (name: string) => void;
 	/** Free-form planner instructions from the HyperFrames prompt window. */
 	hfDirection: string;
 	setHfDirection: (direction: string) => void;
@@ -56,6 +62,14 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 					disabledTemplateIds: state.disabledTemplateIds.includes(id)
 						? state.disabledTemplateIds.filter((t) => t !== id)
 						: [...state.disabledTemplateIds, id],
+				})),
+
+			disabledHfAssets: [],
+			toggleHfAsset: (name) =>
+				set((state) => ({
+					disabledHfAssets: state.disabledHfAssets.includes(name)
+						? state.disabledHfAssets.filter((n) => n !== name)
+						: [...state.disabledHfAssets, name],
 				})),
 
 			hfDirection: "",
