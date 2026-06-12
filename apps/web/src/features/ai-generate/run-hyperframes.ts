@@ -24,6 +24,7 @@ import {
 } from "@/wasm";
 import { generateUUID } from "@/utils/id";
 import { buildAiAuthHeaders, useAiSettingsStore } from "@/features/ai-generate/store";
+import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { getStyleById } from "@/features/ai-generate/styles";
 import { describeTemplateCatalog } from "@framecut/hf-bridge/templates";
 
@@ -221,6 +222,7 @@ export async function runHyperframes({
 			totalDurationSec,
 			allowedTemplateIds,
 			direction: hfDirection,
+			preferences: usePreferenceStore.getState().buildPreferenceNotes(),
 		}),
 	});
 	if (!planRes.ok) {
@@ -390,6 +392,12 @@ export async function runHyperframes({
 				);
 			}
 		}
+
+		// Self-learning: remember which templates landed, so later deletions
+		// can be read as "the user doesn't like this one".
+		usePreferenceStore
+			.getState()
+			.noteTemplatesPlaced(rendered.map(({ item }) => item.templateId));
 
 		if (sceneAtPlacement !== originSceneId) {
 			await editor.scenes.switchToScene({ sceneId: sceneAtPlacement });

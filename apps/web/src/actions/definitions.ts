@@ -127,7 +127,8 @@ export const ACTIONS = {
 		category: "editing",
 	},
 	"track-select-forward": {
-		description: "Select every clip from the playhead forward",
+		description:
+			"Track Select Forward tool — click the timeline to select everything to the right (Shift+click: one track)",
 		category: "editing",
 	},
 	"open-speed-panel": {
