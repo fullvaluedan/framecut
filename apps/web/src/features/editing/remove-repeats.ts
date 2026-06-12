@@ -5,10 +5,7 @@
  */
 
 import { RemoveRangesCommand, type TimeRange } from "@/commands/timeline/track/remove-ranges";
-import { decodeAudioToFloat32 } from "@/media/audio";
-import { extractTimelineAudio } from "@/media/mediabunny";
-import { transcriptionService } from "@/services/transcription/service";
-import { DEFAULT_TRANSCRIPTION_SAMPLE_RATE } from "@/transcription/audio";
+import { ensureTimelineTranscript } from "@/features/transcription/transcript-cache";
 import { buildAiAuthHeaders } from "@/features/ai-generate/store";
 import { usePreferenceStore } from "@/features/ai-generate/preference-store";
 import { TICKS_PER_SECOND } from "@/wasm";
@@ -42,38 +39,19 @@ export async function runRemoveRepeats({
 		throw new Error("Add some footage to the timeline first.");
 	}
 
-	onProgress?.("Extracting timeline audio...");
-	const audioBlob = await abortable(
-		extractTimelineAudio({
-			tracks: editor.scenes.getActiveScene().tracks,
-			mediaAssets: editor.media.getAssets(),
-			totalDuration,
+	// One shared pipeline + cache: if the background transcriber already did
+	// the work for this exact timeline state, this returns instantly.
+	const { segments, fromCache } = await abortable(
+		ensureTimelineTranscript({
+			editor,
+			signal,
+			onProgress: (p) => onProgress?.(p.detail),
 		}),
 	);
-	const { samples } = await abortable(
-		decodeAudioToFloat32({
-			audioBlob,
-			sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-		}),
-	);
-	onProgress?.("Transcribing...");
-	const transcript = await abortable(
-		transcriptionService.transcribe({
-			audioData: samples,
-			onProgress: (p) => {
-				if (p.status === "loading-model") {
-					onProgress?.(
-						p.progress >= 100
-							? "Initializing speech model..."
-							: `Downloading speech model: ${Math.round(p.progress)}%`,
-					);
-				} else if (p.status === "transcribing") {
-					onProgress?.("Transcribing...");
-				}
-			},
-		}),
-	);
-	if (!transcript.segments.length) {
+	if (fromCache) {
+		onProgress?.("Using the cached transcript...");
+	}
+	if (!segments.length) {
 		throw new Error("No speech found — repeats are detected from the transcript.");
 	}
 
@@ -87,7 +65,7 @@ export async function runRemoveRepeats({
 		headers: { "content-type": "application/json", ...buildAiAuthHeaders() },
 		signal,
 		body: JSON.stringify({
-			segments: transcript.segments,
+			segments,
 			mode,
 			preferences: usePreferenceStore.getState().buildPreferenceNotes(),
 		}),

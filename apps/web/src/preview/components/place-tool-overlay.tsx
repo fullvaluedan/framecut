@@ -47,19 +47,22 @@ export function PlaceToolOverlay({
 	/**
 	 * Premiere behavior: drawing with a video/image/graphic clip selected cuts
 	 * a freeform MASK into that clip (feather + invert live in the Masks tab).
-	 * Returns false when there's no maskable selection — we fall back to
-	 * creating a standalone custom shape instead.
+	 * "no-target" = nothing maskable selected (fall back to a custom shape);
+	 * "failed" = a maskable clip IS selected but the mask couldn't be placed
+	 * (never silently turn that into a shape layer — tell the user why).
 	 */
-	const finishPenAsMask = (): boolean => {
+	const finishPenAsMask = (): "masked" | "no-target" | "failed" => {
 		const selected = editor.selection.getSelectedElements();
-		if (selected.length !== 1) return false;
+		if (selected.length !== 1) return "no-target";
 		const ref = selected[0];
 		const withTrack = editor.timeline.getElementsWithTracks({
 			elements: selected,
 		})[0];
-		if (!withTrack) return false;
+		if (!withTrack) return "no-target";
 		const target = withTrack.element;
-		if (!["video", "image", "graphic"].includes(target.type)) return false;
+		if (!["video", "image", "graphic"].includes(target.type)) {
+			return "no-target";
+		}
 
 		const canvasSize = editor.project.getActive().settings.canvasSize;
 		const clampedTime = Math.min(
@@ -74,13 +77,13 @@ export function PlaceToolOverlay({
 		}).find(
 			(item) => item.trackId === ref.trackId && item.elementId === target.id,
 		)?.bounds;
-		if (!bounds) return false;
+		if (!bounds) return "failed";
 
 		const mask = buildDefaultMaskInstance({
 			maskType: "freeform",
 			elementSize: { width: bounds.width, height: bounds.height },
 		});
-		if (mask.type !== "freeform") return false;
+		if (mask.type !== "freeform") return "failed";
 		const params = mask.params as FreeformPathMaskParams;
 		params.path = penPoints.map(([nx, ny]) => {
 			const local = freeformCanvasPointToLocal({
@@ -112,11 +115,11 @@ export function PlaceToolOverlay({
 				},
 			],
 		});
-		toast.success("Mask drawn on the clip", {
+		toast.success("Mask cut into the clip", {
 			description:
 				"Feather, Invert, and point editing live in the Masks tab. Drawing again replaces the mask.",
 		});
-		return true;
+		return "masked";
 	};
 
 	const finishPen = () => {
@@ -124,7 +127,16 @@ export function PlaceToolOverlay({
 			setTool(null);
 			return;
 		}
-		if (finishPenAsMask()) {
+		const maskOutcome = finishPenAsMask();
+		if (maskOutcome === "masked") {
+			setTool(null);
+			return;
+		}
+		if (maskOutcome === "failed") {
+			toast.error("Couldn't cut the mask into the selected clip", {
+				description:
+					"The clip isn't visible at the playhead. Park the playhead over it (and make sure its track is visible), then draw again.",
+			});
 			setTool(null);
 			return;
 		}
@@ -230,7 +242,7 @@ export function PlaceToolOverlay({
 				tool.kind === "text"
 					? "Click to place text (Esc to cancel)"
 					: tool.kind === "pen"
-						? "Click to add points; click the first point (or double-click) to close. With a clip selected this draws a MASK on it. Esc cancels."
+						? "Click to add points; close by clicking the FIRST point (like Premiere). With a clip selected this cuts a MASK into it. Esc cancels."
 						: "Click to place the shape (Esc to cancel)"
 			}
 			style={{
@@ -240,7 +252,6 @@ export function PlaceToolOverlay({
 				height: sceneHeight,
 			}}
 			onClick={handleClick}
-			onDoubleClick={tool.kind === "pen" ? finishPen : undefined}
 		>
 			{tool.kind === "pen" && penPoints.length > 0 && (
 				<svg
@@ -248,15 +259,25 @@ export function PlaceToolOverlay({
 					viewBox="0 0 1 1"
 					preserveAspectRatio="none"
 				>
-					<polygon
+					{/* Open polyline while drawing — Premiere only closes the path
+					    when you click the first vertex, so don't pre-close it. */}
+					<polyline
 						points={penPoints.map(([x, y]) => `${x},${y}`).join(" ")}
-						fill="rgba(56,189,248,0.25)"
+						fill="rgba(56,189,248,0.15)"
 						stroke="#38bdf8"
 						strokeWidth={0.003}
 					/>
 					{penPoints.map(([x, y], index) => (
 						// eslint-disable-next-line react/no-array-index-key -- points are append-only while drawing
-						<circle key={index} cx={x} cy={y} r={0.006} fill="#38bdf8" />
+						<circle
+							key={index}
+							cx={x}
+							cy={y}
+							r={index === 0 && penPoints.length >= 3 ? 0.012 : 0.006}
+							fill={index === 0 && penPoints.length >= 3 ? "#ffffff" : "#38bdf8"}
+							stroke="#38bdf8"
+							strokeWidth={index === 0 ? 0.003 : 0}
+						/>
 					))}
 				</svg>
 			)}

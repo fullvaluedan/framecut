@@ -25,6 +25,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { usePanelMaximizeStore } from "@/editor/panel-maximize-store";
 import { cn } from "@/utils/ui";
+import { toast } from "sonner";
 
 interface RegistryAsset {
 	name: string;
@@ -255,6 +256,88 @@ function ListRow({ item }: { item: BrowserItem }) {
 	);
 }
 
+/**
+ * Showcase presets: one click pins the planner to a specific LOOK — which
+ * templates it may use and a direction brief — so "what do I want to
+ * showcase?" is a menu, not a blank prompt. A true full-frame layout
+ * (Swiss-grid keypoints around the video) needs a new HyperFrames template
+ * and is on the roadmap.
+ */
+const SHOWCASE_PRESETS: {
+	id: string;
+	title: string;
+	description: string;
+	templateIds: string[];
+	direction: string;
+}[] = [
+	{
+		id: "key-points",
+		title: "Key points",
+		description: "A section break per key point, pills for the details.",
+		templateIds: ["section-break", "callout-pill"],
+		direction:
+			"Identify the 3-6 KEY POINTS of this video. Mark the start of each with a section-break naming the point in 2-4 words, and reinforce at most one important detail per point with a callout pill. Nothing else.",
+	},
+	{
+		id: "numbers",
+		title: "Numbers & stats",
+		description: "Every number gets the number-pop treatment.",
+		templateIds: ["number-pop", "callout-pill"],
+		direction:
+			"Highlight EVERY spoken number, price, percentage, or statistic with number-pop, copied exactly as spoken. Use a callout pill only when a number needs its context named. No other effects.",
+	},
+	{
+		id: "chapters",
+		title: "Title & chapters",
+		description: "One opening title, then a break per chapter.",
+		templateIds: ["kinetic-title", "section-break"],
+		direction:
+			"Open with ONE kinetic-title naming the video's topic in the first seconds. Then add a section-break at each clear chapter change. No other effects.",
+	},
+	{
+		id: "speaker",
+		title: "Speaker & quotes",
+		description: "Lower-third intro, best lines as pills.",
+		templateIds: ["lower-third", "callout-pill"],
+		direction:
+			"Add ONE lower-third introducing the speaker near the start (infer the name/role from the transcript; use a fitting description if unnamed). Then pull the 2-4 most quotable lines as callout pills, verbatim.",
+	},
+];
+
+function ShowcaseSection({
+	onApply,
+}: {
+	onApply: (preset: {
+		templateIds: string[];
+		direction: string;
+		title: string;
+	}) => void;
+}) {
+	return (
+		<div className="flex flex-col gap-1.5 px-3 pt-1 pb-2">
+			<p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+				Showcase
+			</p>
+			<div className="grid grid-cols-2 gap-1.5">
+				{SHOWCASE_PRESETS.map((preset) => (
+					<button
+						key={preset.id}
+						type="button"
+						className="bg-foreground/5 hover:bg-foreground/10 hover:ring-primary/50 flex flex-col items-start gap-0.5 rounded-md p-2 text-left ring-1 ring-transparent transition-colors"
+						title={preset.direction}
+						onClick={() => onApply(preset)}
+					>
+						<span className="text-xs font-medium">{preset.title}</span>
+						<span className="text-muted-foreground text-[10px] leading-snug">
+							{preset.description}
+						</span>
+					</button>
+				))}
+			</div>
+		</div>
+	);
+}
+
 export function HyperframesPanel() {
 	const disabledTemplateIds = useAiSettingsStore((s) => s.disabledTemplateIds);
 	const toggleTemplate = useAiSettingsStore((s) => s.toggleTemplate);
@@ -347,6 +430,18 @@ export function HyperframesPanel() {
 			}
 		>
 			<div className="flex flex-col gap-1 pb-4">
+				<ShowcaseSection
+					onApply={({ templateIds, direction, title }) => {
+						const allIds = describeTemplateCatalog().map((t) => t.id);
+						setTemplatesEnabled(allIds, false);
+						setTemplatesEnabled(templateIds, true);
+						setHfDirection(direction);
+						toast.success(`Showcase applied: ${title}`, {
+							description:
+								"Templates and direction are set — hit RUN HYPERFRAMES.",
+						});
+					}}
+				/>
 				<Section
 					title="Templates"
 					subtitle="used by RUN HYPERFRAMES"

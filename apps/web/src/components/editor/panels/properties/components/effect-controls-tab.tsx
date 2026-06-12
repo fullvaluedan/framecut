@@ -344,16 +344,14 @@ function ValueField({
 			cumulative += move.movementX;
 			if (!scrubbing && Math.abs(cumulative) >= 3) {
 				scrubbing = true;
-				// Pointer lock keeps long drags from hitting the screen edge, but
-				// scrubbing must work even where it's unavailable or denied.
+				// Pointer CAPTURE, not pointer lock: Chromium leaves the cursor
+				// invisible after exitPointerLock until the next click.
 				try {
-					const lock = surface.requestPointerLock?.() as
-						| Promise<void>
-						| undefined;
-					lock?.catch?.(() => undefined);
+					surface.setPointerCapture(event.pointerId);
 				} catch {
-					// keep scrubbing without lock
+					// capture is best-effort
 				}
+				document.body.style.cursor = "ew-resize";
 			}
 			if (scrubbing) {
 				const shown = previewDisplay(
@@ -372,11 +370,7 @@ function ValueField({
 		const onUp = () => {
 			document.removeEventListener("pointermove", onMove);
 			document.removeEventListener("pointerup", onUp);
-			try {
-				if (document.pointerLockElement) document.exitPointerLock();
-			} catch {
-				// lock was never granted
-			}
+			document.body.style.cursor = "";
 			setScrubText(null);
 			if (scrubbing) {
 				onCommit();

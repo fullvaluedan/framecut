@@ -11,11 +11,8 @@ import {
 	BatchCommand,
 	InsertElementCommand,
 } from "@/commands";
-import { decodeAudioToFloat32 } from "@/media/audio";
-import { extractTimelineAudio } from "@/media/mediabunny";
 import { processMediaAssets } from "@/media/processing";
-import { transcriptionService } from "@/services/transcription/service";
-import { DEFAULT_TRANSCRIPTION_SAMPLE_RATE } from "@/transcription/audio";
+import { ensureTimelineTranscript } from "@/features/transcription/transcript-cache";
 import { frameRateToFloat } from "@/fps/utils";
 import {
 	TICKS_PER_SECOND,
@@ -148,52 +145,33 @@ export async function runHyperframes({
 		throw new Error("Add some footage to the timeline first.");
 	}
 
-	// 1. Transcribe the timeline's audio (all client-side).
-	onProgress({ stage: "extracting", detail: "Extracting timeline audio..." });
-	const audioBlob = await abortable(
-		extractTimelineAudio({
-			tracks: editor.scenes.getActiveScene().tracks,
-			mediaAssets: editor.media.getAssets(),
-			totalDuration,
+	// 1. Get the timeline transcript — instant when the background
+	// transcriber has already cached this exact timeline state.
+	onProgress({ stage: "extracting", detail: "Getting the transcript..." });
+	const { segments, fromCache } = await abortable(
+		ensureTimelineTranscript({
+			editor,
+			signal,
+			onProgress: (p) =>
+				onProgress({
+					stage:
+						p.phase === "extracting"
+							? "extracting"
+							: p.phase === "transcribing"
+								? "transcribing"
+								: "loading-model",
+					detail: p.detail,
+					progress: p.progress,
+				}),
 		}),
 	);
-	const { samples } = await abortable(
-		decodeAudioToFloat32({
-			audioBlob,
-			sampleRate: DEFAULT_TRANSCRIPTION_SAMPLE_RATE,
-		}),
-	);
-	const transcript = await abortable(
-		transcriptionService.transcribe({
-			audioData: samples,
-			onProgress: (p) => {
-				if (p.status === "loading-model") {
-					// 100% downloaded but not yet transcribing = the model is
-					// initializing — say so instead of sitting on a full bar.
-					if (p.progress >= 100) {
-						onProgress({
-							stage: "loading-model",
-							detail:
-								"Speech model downloaded — initializing (can take ~30s the first time)...",
-							progress: 1,
-						});
-					} else {
-						onProgress({
-							stage: "loading-model",
-							detail: `Downloading speech model (one-time, ~40 MB): ${Math.round(p.progress)}%`,
-							progress: p.progress / 100,
-						});
-					}
-				} else if (p.status === "transcribing") {
-					onProgress({
-						stage: "transcribing",
-						detail: "Listening to your video...",
-					});
-				}
-			},
-		}),
-	);
-	if (!transcript.segments.length) {
+	if (fromCache) {
+		onProgress({
+			stage: "transcribing",
+			detail: "Using the cached transcript...",
+		});
+	}
+	if (!segments.length) {
 		throw new Error(
 			"No speech found in the timeline audio — HyperFrames plans effects from the transcript.",
 		);
@@ -218,7 +196,7 @@ export async function runHyperframes({
 		headers: { "content-type": "application/json", ...buildAiAuthHeaders() },
 		signal,
 		body: JSON.stringify({
-			segments: transcript.segments,
+			segments,
 			totalDurationSec,
 			allowedTemplateIds,
 			direction: hfDirection,

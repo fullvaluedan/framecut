@@ -92,6 +92,22 @@ export async function runAssistant({
 			if (command.direction?.trim()) {
 				useAiSettingsStore.getState().setHfDirection(command.direction.trim());
 			}
+			// "Change the effects" means REPLACE: clear the previous AI clips so
+			// the new plan isn't stacked on top of (and drowned out by) the old.
+			if (command.replace) {
+				const tracks = editor.scenes.getActiveScene().tracks;
+				const existing = tracks.overlay.flatMap((track) =>
+					track.elements
+						.filter(
+							(el) => el.type === "video" && (el as { framecutAi?: unknown }).framecutAi,
+						)
+						.map((el) => ({ trackId: track.id, elementId: el.id })),
+				);
+				if (existing.length) {
+					onStage?.(`Removing ${existing.length} previous effects...`);
+					editor.timeline.deleteElements({ elements: existing });
+				}
+			}
 			const result = await runHyperframes({
 				editor,
 				onProgress: (p) => onStage?.(p.detail ?? "Generating effects..."),

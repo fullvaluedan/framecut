@@ -11,7 +11,7 @@ export type AssistantCommand =
 			command: "ai_cut";
 			mode: "silences" | "repeats" | "cleanup" | "youtube";
 	  }
-	| { command: "run_hyperframes"; direction: string }
+	| { command: "run_hyperframes"; direction: string; replace?: boolean }
 	| { command: "add_text"; text: string }
 	| { command: "open_captions" }
 	| { command: "reject"; reason: string };
@@ -38,6 +38,7 @@ const ASSISTANT_SCHEMA = {
 			enum: ["silences", "repeats", "cleanup", "youtube"],
 		},
 		direction: { type: "string" },
+		replace: { type: "boolean" },
 		text: { type: "string" },
 		reason: { type: "string" },
 	},
@@ -51,7 +52,7 @@ function buildAssistantPrompt(userPrompt: string): string {
 - find_broll {query}: the user wants b-roll / supporting imagery. query = a concise image search phrase.
 - find_audio {query, audioType}: the user wants background music ("music") or a sound effect ("sound_effects"). query = a natural-language description of the sound.
 - ai_cut {mode}: the user wants the footage cut/cleaned. mode: "silences" (just dead air), "repeats" (just retakes), "cleanup" (stutters+retakes+tangents), "youtube" (full edit: assemble everything, pacing, hook — use this for "edit my video", "make this a YouTube video", "cut everything").
-- run_hyperframes {direction}: the user wants motion graphics / effects / overlays / animations generated. direction = their creative instructions, verbatim where possible.
+- run_hyperframes {direction, replace}: the user wants motion graphics / effects / overlays / animations generated. direction = their creative instructions, verbatim where possible. Set replace=true when they want to CHANGE, REDO, or REPLACE effects that already exist ("change the effects to...", "redo the graphics", "try a different style") so the old ones are cleared first.
 - add_text {text}: the user wants a specific text/title placed on the video. text = the exact words to display.
 - open_captions: the user wants captions/subtitles generated or styled.
 - reject {reason}: ANYTHING ELSE.
