@@ -708,6 +708,28 @@ function PositionRow({ ctx }: { ctx: RowContext }) {
 					commit();
 				}}
 			/>
+			<button
+				type="button"
+				title="Center horizontally in frame"
+				className="text-muted-foreground hover:text-foreground px-0.5 text-[10px]"
+				onClick={() => {
+					previewAxis(paramX, POSITION_X, 0);
+					commit();
+				}}
+			>
+				⇔
+			</button>
+			<button
+				type="button"
+				title="Center vertically in frame"
+				className="text-muted-foreground hover:text-foreground px-0.5 text-[10px]"
+				onClick={() => {
+					previewAxis(paramY, POSITION_Y, 0);
+					commit();
+				}}
+			>
+				⇕
+			</button>
 		</Row>
 	);
 }

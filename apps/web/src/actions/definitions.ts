@@ -106,6 +106,10 @@ export const ACTIONS = {
 		description: "Zoom to fit the entire timeline",
 		category: "timeline",
 	},
+	"toggle-panel-maximize": {
+		description: "Maximize or restore the assets panel",
+		category: "navigation",
+	},
 	"toggle-ripple-editing": {
 		description: "Toggle ripple editing",
 		category: "editing",
@@ -205,6 +209,7 @@ const ACTION_DEFAULT_SHORTCUTS = [
 	["timeline-zoom-in", ["=", "+"]],
 	["timeline-zoom-out", ["-"]],
 	["timeline-zoom-fit", ["\\"]],
+	["toggle-panel-maximize", ["`"]],
 	["select-all", ["ctrl+a"]],
 	["cancel-interaction", ["escape"]],
 	["duplicate-selected", ["ctrl+d"]],

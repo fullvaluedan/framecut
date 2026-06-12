@@ -33,6 +33,9 @@ interface AiSettingsStore {
 	 */
 	disabledHfAssets: string[];
 	toggleHfAsset: (name: string) => void;
+	/** HyperFrames browser layout. */
+	hfBrowserView: "grid" | "list";
+	setHfBrowserView: (view: "grid" | "list") => void;
 	/** Free-form planner instructions from the HyperFrames prompt window. */
 	hfDirection: string;
 	setHfDirection: (direction: string) => void;
@@ -71,6 +74,9 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 						? state.disabledHfAssets.filter((n) => n !== name)
 						: [...state.disabledHfAssets, name],
 				})),
+
+			hfBrowserView: "grid",
+			setHfBrowserView: (hfBrowserView) => set({ hfBrowserView }),
 
 			hfDirection: "",
 			setHfDirection: (hfDirection) => set({ hfDirection }),

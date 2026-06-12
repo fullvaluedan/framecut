@@ -1,4 +1,5 @@
 import { cn } from "@/utils/ui";
+import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 
 interface PanelViewProps extends React.HTMLAttributes<HTMLDivElement> {
 	title?: string;
@@ -32,7 +33,12 @@ export function PanelView({
 			{...rest}
 		>
 			{!hideHeader && (
-				<div className="bg-background h-11 shrink-0 pl-3 pr-2 flex items-center justify-between border-b">
+				// eslint-disable-next-line jsx-a11y/no-static-element-interactions -- Premiere-style: double-click a panel header to maximize; ` is the keyboard route.
+				<div
+					className="bg-background h-11 shrink-0 pl-3 pr-2 flex items-center justify-between border-b"
+					title="Double-click to maximize this panel (` also toggles)"
+					onDoubleClick={() => useAssetsPanelStore.getState().toggleMaximized()}
+				>
 					{title && (
 						<span className="text-muted-foreground text-sm">{title}</span>
 					)}

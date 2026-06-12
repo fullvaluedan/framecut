@@ -8,14 +8,12 @@ import { effectPreviewService } from "@/services/renderer/effect-preview";
 import { useEditor } from "@/editor/use-editor";
 import { buildEffectElement } from "@/timeline/element-utils";
 import type { EffectDefinition } from "@/effects/types";
-import { HfAssetsSection } from "@/features/ai-generate/components/hf-assets-section";
 
 export function EffectsView() {
 	const effects = effectsRegistry.getAll();
 
 	return (
 		<PanelView title="Effects">
-			<HfAssetsSection />
 			<EffectsGrid effects={effects} />
 		</PanelView>
 	);
