@@ -7,7 +7,7 @@ import { Captions } from "@/subtitles/components/assets-view";
 import { MediaView } from "./views/assets";
 import { SettingsView } from "./views/settings";
 import { SoundsView } from "@/sounds/components/assets-view";
-import { StickersView } from "@/stickers/components/assets-view";
+import { ShapesView } from "@/graphics/components/assets-view";
 import { TextView } from "@/text/components/assets-view";
 import { EffectsView } from "@/effects/components/assets-view";
 import { HyperframesPanel } from "@/features/ai-generate/components/hyperframes-panel";
@@ -20,7 +20,7 @@ export function AssetsPanel() {
 		hyperframes: <HyperframesPanel />,
 		sounds: <SoundsView />,
 		text: <TextView />,
-		stickers: <StickersView />,
+		shapes: <ShapesView />,
 		effects: <EffectsView />,
 		transitions: (
 			<div className="text-muted-foreground p-4">
