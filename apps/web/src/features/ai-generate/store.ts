@@ -33,6 +33,9 @@ interface AiSettingsStore {
 	 */
 	disabledHfAssets: string[];
 	toggleHfAsset: (name: string) => void;
+	/** Bulk check/uncheck for a whole browser section. */
+	setTemplatesEnabled: (ids: string[], enabled: boolean) => void;
+	setHfAssetsEnabled: (names: string[], enabled: boolean) => void;
 	/** HyperFrames browser layout. */
 	hfBrowserView: "grid" | "list";
 	setHfBrowserView: (view: "grid" | "list") => void;
@@ -73,6 +76,18 @@ export const useAiSettingsStore = create<AiSettingsStore>()(
 					disabledHfAssets: state.disabledHfAssets.includes(name)
 						? state.disabledHfAssets.filter((n) => n !== name)
 						: [...state.disabledHfAssets, name],
+				})),
+			setTemplatesEnabled: (ids, enabled) =>
+				set((state) => ({
+					disabledTemplateIds: enabled
+						? state.disabledTemplateIds.filter((id) => !ids.includes(id))
+						: [...new Set([...state.disabledTemplateIds, ...ids])],
+				})),
+			setHfAssetsEnabled: (names, enabled) =>
+				set((state) => ({
+					disabledHfAssets: enabled
+						? state.disabledHfAssets.filter((n) => !names.includes(n))
+						: [...new Set([...state.disabledHfAssets, ...names])],
 				})),
 
 			hfBrowserView: "grid",

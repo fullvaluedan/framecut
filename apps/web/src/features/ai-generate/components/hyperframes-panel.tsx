@@ -19,9 +19,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
 	ArrowDown01Icon,
 	ArrowRight01Icon,
+	FullScreenIcon,
 	GridViewIcon,
 	LeftToRightListDashIcon,
 } from "@hugeicons/core-free-icons";
+import { useAssetsPanelStore } from "@/components/editor/panels/assets/assets-panel-store";
 import { cn } from "@/utils/ui";
 
 interface RegistryAsset {
@@ -51,36 +53,57 @@ function Section({
 	subtitle,
 	items,
 	view,
+	onSetAll,
 }: {
 	title: string;
 	subtitle?: string;
 	items: BrowserItem[];
 	view: "grid" | "list";
+	onSetAll: (enabled: boolean) => void;
 }) {
 	const [open, setOpen] = useState(true);
 	const checkedCount = items.filter((i) => i.checked).length;
 	return (
 		<div className="border-b pb-2">
-			<button
-				type="button"
-				className="flex w-full items-center gap-1.5 py-2 text-left"
-				onClick={() => setOpen((o) => !o)}
-			>
-				<HugeiconsIcon
-					icon={open ? ArrowDown01Icon : ArrowRight01Icon}
-					size={14}
-					className="text-muted-foreground"
-				/>
-				<span className="text-xs font-semibold">{title}</span>
-				<span className="text-muted-foreground text-[0.65rem]">
-					{checkedCount}/{items.length}
-				</span>
-				{subtitle && (
-					<span className="text-muted-foreground ml-auto truncate text-[0.6rem]">
-						{subtitle}
+			<div className="flex w-full items-center gap-1.5 py-2">
+				<button
+					type="button"
+					className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+					onClick={() => setOpen((o) => !o)}
+				>
+					<HugeiconsIcon
+						icon={open ? ArrowDown01Icon : ArrowRight01Icon}
+						size={14}
+						className="text-muted-foreground"
+					/>
+					<span className="text-xs font-semibold">{title}</span>
+					<span className="text-muted-foreground text-[0.65rem]">
+						{checkedCount}/{items.length}
 					</span>
-				)}
-			</button>
+					{subtitle && (
+						<span className="text-muted-foreground ml-auto truncate text-[0.6rem]">
+							{subtitle}
+						</span>
+					)}
+				</button>
+				<button
+					type="button"
+					className="text-muted-foreground hover:text-foreground shrink-0 text-[0.65rem]"
+					title={`Select every ${title.toLowerCase()} item`}
+					onClick={() => onSetAll(true)}
+				>
+					All
+				</button>
+				<span className="text-muted-foreground text-[0.6rem]">·</span>
+				<button
+					type="button"
+					className="text-muted-foreground hover:text-foreground shrink-0 text-[0.65rem]"
+					title={`Deselect every ${title.toLowerCase()} item`}
+					onClick={() => onSetAll(false)}
+				>
+					None
+				</button>
+			</div>
 			{open &&
 				(view === "grid" ? (
 					<div
@@ -151,9 +174,18 @@ function Preview({
 			/>
 		);
 	}
+	// No hosted preview (e.g. the example styles): a deterministic gradient
+	// tile from the asset name, so nothing reads as broken or missing.
+	const hue =
+		[...item.id].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
 	return (
-		<div className={cn(base, "flex items-center justify-center")}>
-			<span className="text-muted-foreground select-none px-1 text-center text-[0.6rem]">
+		<div
+			className={cn(base, "flex items-center justify-center")}
+			style={{
+				background: `linear-gradient(135deg, hsl(${hue} 45% 22%), hsl(${(hue + 50) % 360} 55% 38%))`,
+			}}
+		>
+			<span className="select-none px-1 text-center text-[0.6rem] font-medium text-white/85">
 				{item.title}
 			</span>
 		</div>
@@ -213,6 +245,8 @@ export function HyperframesPanel() {
 	const tokensUsedTotal = useAiSettingsStore((s) => s.tokensUsedTotal);
 	const view = useAiSettingsStore((s) => s.hfBrowserView);
 	const setView = useAiSettingsStore((s) => s.setHfBrowserView);
+	const setTemplatesEnabled = useAiSettingsStore((s) => s.setTemplatesEnabled);
+	const setHfAssetsEnabled = useAiSettingsStore((s) => s.setHfAssetsEnabled);
 
 	const [registry, setRegistry] = useState<RegistryAsset[]>([]);
 	const [registryError, setRegistryError] = useState<string | null>(null);
@@ -258,16 +292,30 @@ export function HyperframesPanel() {
 		<PanelView
 			title="HyperFrames"
 			actions={
-				<Button
-					size="icon"
-					variant="ghost"
-					title={view === "grid" ? "Switch to list view" : "Switch to grid view"}
-					onClick={() => setView(view === "grid" ? "list" : "grid")}
-				>
-					<HugeiconsIcon
-						icon={view === "grid" ? LeftToRightListDashIcon : GridViewIcon}
-					/>
-				</Button>
+				<div className="flex items-center">
+					<Button
+						size="icon"
+						variant="ghost"
+						title={
+							view === "grid" ? "Switch to list view" : "Switch to grid view"
+						}
+						onClick={() => setView(view === "grid" ? "list" : "grid")}
+					>
+						<HugeiconsIcon
+							icon={view === "grid" ? LeftToRightListDashIcon : GridViewIcon}
+						/>
+					</Button>
+					<Button
+						size="icon"
+						variant="ghost"
+						title="Maximize this panel (` or double-click the header)"
+						onClick={() =>
+							useAssetsPanelStore.getState().toggleMaximized()
+						}
+					>
+						<HugeiconsIcon icon={FullScreenIcon} />
+					</Button>
+				</div>
 			}
 		>
 			<div className="flex flex-col gap-1 pb-4">
@@ -276,13 +324,45 @@ export function HyperframesPanel() {
 					subtitle="used by RUN HYPERFRAMES"
 					items={templateItems}
 					view={view}
+					onSetAll={(enabled) =>
+						setTemplatesEnabled(
+							templateItems.map((t) => t.id),
+							enabled,
+						)
+					}
 				/>
-				<Section title="Styles" items={registryItems("example")} view={view} />
-				<Section title="Blocks" items={registryItems("block")} view={view} />
+				<Section
+					title="Styles"
+					items={registryItems("example")}
+					view={view}
+					onSetAll={(enabled) =>
+						setHfAssetsEnabled(
+							registryItems("example").map((i) => i.id),
+							enabled,
+						)
+					}
+				/>
+				<Section
+					title="Blocks"
+					items={registryItems("block")}
+					view={view}
+					onSetAll={(enabled) =>
+						setHfAssetsEnabled(
+							registryItems("block").map((i) => i.id),
+							enabled,
+						)
+					}
+				/>
 				<Section
 					title="Components"
 					items={registryItems("component")}
 					view={view}
+					onSetAll={(enabled) =>
+						setHfAssetsEnabled(
+							registryItems("component").map((i) => i.id),
+							enabled,
+						)
+					}
 				/>
 				{registryError && (
 					<p className="text-muted-foreground text-[0.65rem]">{registryError}</p>
