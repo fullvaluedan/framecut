@@ -72,6 +72,7 @@ export function TemplateControlsTab({
 	const [durationSec, setDurationSec] = useState(
 		Number((element.duration / TICKS_PER_SECOND).toFixed(2)),
 	);
+	const [scale, setScale] = useState(element.motionTemplate?.scale ?? 1);
 
 	if (!marker || !template) {
 		return (
@@ -87,6 +88,7 @@ export function TemplateControlsTab({
 	const apply = (
 		nextVariables: TemplateVariables,
 		nextDurationSec: number,
+		nextScale: number = scale,
 	) => {
 		const tracks = editor.scenes.getActiveScene().tracks;
 		const siblings = getMotionTemplateGroup({
@@ -106,6 +108,7 @@ export function TemplateControlsTab({
 			canvasSize: editor.project.getActive().settings.canvasSize,
 			groupId: marker.groupId,
 			fromAi: siblings[0].element.name.startsWith("AI:"),
+			scale: nextScale,
 		});
 		const count = Math.min(built.length, siblings.length);
 		const updates = [];
@@ -137,6 +140,12 @@ export function TemplateControlsTab({
 		const clamped = Math.max(range.min, Math.min(range.max, value));
 		setDurationSec(clamped);
 		apply(variables, clamped);
+	};
+
+	const commitScale = (value: number) => {
+		const clamped = Math.max(0.2, Math.min(4, value));
+		setScale(clamped);
+		apply(variables, durationSec, clamped);
 	};
 
 	const detach = () => {
@@ -229,11 +238,32 @@ export function TemplateControlsTab({
 
 			<Section>
 				<SectionHeader>
+					<SectionTitle className="flex-1">Size</SectionTitle>
+				</SectionHeader>
+				<SectionContent className="flex flex-col gap-1.5 px-3 pb-3">
+					<div className="flex items-center justify-between gap-2">
+						<span className="text-muted-foreground text-xs">Scale (×)</span>
+						<NumberField
+							key={`scale-${scale}`}
+							value={scale}
+							min={0.2}
+							max={4}
+							onCommit={commitScale}
+						/>
+					</div>
+					<p className="text-muted-foreground text-[0.65rem]">
+						Resizes the whole template — 1 = default, 0.5 = half, 2 = double.
+					</p>
+				</SectionContent>
+			</Section>
+
+			<Section>
+				<SectionHeader>
 					<SectionTitle className="flex-1">Timing</SectionTitle>
 				</SectionHeader>
 				<SectionContent className="flex items-center justify-between gap-2 px-3 pb-3">
 					<span className="text-muted-foreground text-xs">Duration (sec)</span>
-					<DurationField
+					<NumberField
 						key={durationSec}
 						value={durationSec}
 						min={template.durationRange.min}
@@ -284,7 +314,7 @@ function TextField({
 	);
 }
 
-function DurationField({
+function NumberField({
 	value,
 	min,
 	max,

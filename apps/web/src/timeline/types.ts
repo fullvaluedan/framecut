@@ -168,6 +168,8 @@ export interface TextElement extends BaseTimelineElement {
 		templateId: string;
 		groupId: string;
 		variables: Record<string, string | number | boolean>;
+		/** User size multiplier on top of canvas-proportional sizing (default 1). */
+		scale?: number;
 	};
 }
 

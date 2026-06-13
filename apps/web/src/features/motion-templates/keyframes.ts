@@ -62,12 +62,44 @@ export function bakeAnimations({
 	return animations;
 }
 
-const ENTER_SEC = 0.4;
-const EXIT_SEC = 0.4;
+const ENTER_MIN = 0.45;
+const ENTER_MAX = 0.9;
+/** Entrance/exit as a fraction of clip length, before clamping. */
+const ENTER_FRACTION = 0.18;
+
+function clamp(v: number, lo: number, hi: number): number {
+	return Math.min(Math.max(v, lo), hi);
+}
+
+export interface TimingOverrides {
+	enterSec?: number;
+	exitSec?: number;
+}
+
+/**
+ * Entrance/exit seconds, PROPORTIONAL to clip length (so a 1.5s title and a
+ * 10s lower-third both feel paced, not rushed), clamped to a sane band and
+ * overridable per-template (the Fade controls in Template Controls).
+ */
+export function resolveEnterExit(
+	durationSec: number,
+	overrides?: TimingOverrides,
+): { enter: number; exit: number } {
+	const auto = clamp(durationSec * ENTER_FRACTION, ENTER_MIN, ENTER_MAX);
+	const enter =
+		overrides?.enterSec !== undefined && overrides.enterSec >= 0
+			? overrides.enterSec
+			: auto;
+	const exit =
+		overrides?.exitSec !== undefined && overrides.exitSec >= 0
+			? overrides.exitSec
+			: auto;
+	return { enter, exit };
+}
 
 /** Clamp helper: exits land at the end even on very short clips. */
-function exitStart(durationSec: number): number {
-	return Math.max(ENTER_SEC + 0.1, durationSec - EXIT_SEC);
+function exitStart(durationSec: number, enter: number, exit: number): number {
+	return Math.max(enter + 0.1, durationSec - exit);
 }
 
 /** Fade + directional slide in, mirrored out. Offsets in canvas px. */
@@ -78,6 +110,8 @@ export function fadeSlide({
 	fromDx = 0,
 	fromDy = 0,
 	delaySec = 0,
+	enterSec,
+	exitSec,
 }: {
 	durationSec: number;
 	baseX: number;
@@ -85,10 +119,11 @@ export function fadeSlide({
 	fromDx?: number;
 	fromDy?: number;
 	delaySec?: number;
-}): TemplateChannels {
+} & TimingOverrides): TemplateChannels {
+	const { enter, exit } = resolveEnterExit(durationSec, { enterSec, exitSec });
 	const start = delaySec;
-	const settled = delaySec + ENTER_SEC;
-	const out = exitStart(durationSec);
+	const settled = delaySec + enter;
+	const out = exitStart(durationSec, enter, exit);
 	const end = Math.max(out + 0.05, durationSec - 0.05);
 	return {
 		opacity: [
@@ -117,25 +152,32 @@ export function popIn({
 	durationSec,
 	delaySec = 0,
 	baseScale = 1,
+	enterSec,
+	exitSec,
 }: {
 	durationSec: number;
 	delaySec?: number;
 	baseScale?: number;
-}): TemplateChannels {
+} & TimingOverrides): TemplateChannels {
+	const { enter, exit } = resolveEnterExit(durationSec, { enterSec, exitSec });
 	const start = delaySec;
-	const out = exitStart(durationSec);
+	const out = exitStart(durationSec, enter, exit);
 	const end = Math.max(out + 0.05, durationSec - 0.05);
+	// Overshoot at ~65% of the entrance, settle at ~105% — scaled to `enter`
+	// so the pop never outlasts a short clip.
+	const peak = start + enter * 0.65;
+	const settle = start + enter * 1.05;
 	const scaleKeys: KeySpec[] = [
 		{ atSec: start, value: 0.8 * baseScale },
-		{ atSec: start + 0.26, value: 1.06 * baseScale },
-		{ atSec: start + 0.42, value: 1 * baseScale },
+		{ atSec: peak, value: 1.06 * baseScale },
+		{ atSec: settle, value: 1 * baseScale },
 		{ atSec: out, value: 1 * baseScale },
 		{ atSec: end, value: 0.94 * baseScale },
 	];
 	return {
 		opacity: [
 			{ atSec: start, value: 0 },
-			{ atSec: start + 0.2, value: 1 },
+			{ atSec: start + enter * 0.5, value: 1 },
 			{ atSec: out, value: 1 },
 			{ atSec: end, value: 0 },
 		],

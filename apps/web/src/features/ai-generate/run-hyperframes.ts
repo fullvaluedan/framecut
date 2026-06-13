@@ -208,7 +208,9 @@ export async function runHyperframes({
 				variables: item.variables,
 				accent: String(item.variables.accent ?? themeAccent),
 				canvasSize,
-				groupId,
+				// One edit-group PER planned effect — sharing the run-wide id would
+				// make Template Controls treat the whole run as a single template.
+				groupId: generateUUID(),
 				fromAi: true,
 			});
 			for (const element of elements) {
