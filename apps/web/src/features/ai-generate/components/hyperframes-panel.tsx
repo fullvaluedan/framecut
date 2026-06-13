@@ -39,6 +39,18 @@ interface RegistryAsset {
 	previewVideo: string | null;
 	previewPoster: string | null;
 	durationSec: number | null;
+	tags?: string[];
+}
+
+/**
+ * Transition/shader blocks (whip-pan, glitch, transitions-*, etc.) bake to a
+ * SELF-CONTAINED demo (a built-in "Scene A → Scene B"), so dropping one as an
+ * overlay plays that demo over your footage instead of transitioning your
+ * clips. They need a real transition slot between two clips — not yet built —
+ * so we don't offer "Add" on them (it would promise a broken result).
+ */
+function isTransitionBlock(a: RegistryAsset): boolean {
+	return (a.tags ?? []).includes("transition");
 }
 
 interface BrowserItem {
@@ -476,9 +488,13 @@ export function HyperframesPanel() {
 		onToggle: () => toggleTemplate(t.id),
 		demoSrc: `/hf-demos/${t.id}.webm`,
 	}));
-	const registryItems = (kind: string): BrowserItem[] =>
+	const registryItems = (
+		kind: string,
+		predicate?: (a: RegistryAsset) => boolean,
+	): BrowserItem[] =>
 		registry
 			.filter((a) => a.type === `hyperframes:${kind}`)
+			.filter((a) => (predicate ? predicate(a) : true))
 			.map((a) => ({
 				id: a.name,
 				title: a.title,
@@ -493,8 +509,9 @@ export function HyperframesPanel() {
 				previewPoster:
 					a.previewPoster ??
 					(kind === "example" ? `/hf-demos/styles/${a.name}.png` : null),
-				// Blocks are standalone compositions — bakeable & droppable today.
-				...(kind === "block"
+				// Only OVERLAY-SAFE blocks (graphics/cards, not transitions) get an
+				// Add — transitions bake to a self-demo, not a usable overlay.
+				...(kind === "block" && !isTransitionBlock(a)
 					? {
 							onAdd: () => void addBlock(a.name, a.title),
 							adding: bakingName === a.name,
@@ -560,6 +577,7 @@ export function HyperframesPanel() {
 				/>
 				<Section
 					title="Styles"
+					subtitle="looks — apply to your whole edit (coming soon)"
 					items={registryItems("example")}
 					view={view}
 					onSetAll={(enabled) =>
@@ -571,18 +589,33 @@ export function HyperframesPanel() {
 				/>
 				<Section
 					title="Blocks"
-					subtitle="Add → drops on the timeline"
-					items={registryItems("block")}
+					subtitle="graphics & cards — Add drops on the timeline"
+					items={registryItems("block", (a) => !isTransitionBlock(a))}
 					view={view}
 					onSetAll={(enabled) =>
 						setHfAssetsEnabled(
-							registryItems("block").map((i) => i.id),
+							registryItems("block", (a) => !isTransitionBlock(a)).map(
+								(i) => i.id,
+							),
+							enabled,
+						)
+					}
+				/>
+				<Section
+					title="Transitions & effects"
+					subtitle="need a transition slot — not droppable yet"
+					items={registryItems("block", isTransitionBlock)}
+					view={view}
+					onSetAll={(enabled) =>
+						setHfAssetsEnabled(
+							registryItems("block", isTransitionBlock).map((i) => i.id),
 							enabled,
 						)
 					}
 				/>
 				<Section
 					title="Components"
+					subtitle="captions & effects — not droppable yet"
 					items={registryItems("component")}
 					view={view}
 					onSetAll={(enabled) =>
@@ -630,10 +663,12 @@ export function HyperframesPanel() {
 
 				<p className="text-muted-foreground pt-1 text-[0.65rem]">
 					Checked templates are the palette RUN HYPERFRAMES picks from today.
-					Blocks bake once on your computer and drop straight onto the timeline
-					(cached after the first render); styles and components are saved for
-					releases that render them directly. Claude usage on this device: ~
-					{tokensUsedTotal.toLocaleString()} tokens.
+					<span className="text-foreground"> Blocks</span> (graphics & cards) bake
+					once on your computer and drop straight onto the timeline (cached after
+					the first render). Transitions, styles, and components can&apos;t be
+					dropped yet — transitions need a between-clips slot, styles apply as a
+					whole look, and components are caption/effect layers. Claude usage on
+					this device: ~{tokensUsedTotal.toLocaleString()} tokens.
 				</p>
 			</div>
 		</PanelView>
