@@ -18,15 +18,9 @@ import {
 	MOTION_TEMPLATES,
 	getMotionTemplate,
 } from "@/features/motion-templates/templates";
-import {
-	bakeAnimations,
-	fadeSlide,
-} from "@/features/motion-templates/keyframes";
+import { bakeAnimations } from "@/features/motion-templates/keyframes";
 import { DEFAULT_GRAPHIC_SOURCE_SIZE } from "@/graphics/types";
-import {
-	buildGraphicElement,
-	buildTextElement,
-} from "@/timeline/element-utils";
+import { buildGraphicElement } from "@/timeline/element-utils";
 import { generateUUID } from "@/utils/id";
 import { mediaTimeFromSeconds, TICKS_PER_SECOND } from "@/wasm";
 
@@ -81,7 +75,6 @@ export function MotionTemplatesSection() {
 		const tracks = editor.scenes.getActiveScene().tracks;
 		const canvasSize = editor.project.getActive().settings.canvasSize;
 		const { width, height } = canvasSize;
-		const k = height / 1080;
 		const now = editor.playback.getCurrentTime();
 
 		// Applying twice stacks two grids + two sets of key points on top of
@@ -132,67 +125,56 @@ export function MotionTemplatesSection() {
 			new InsertElementCommand({ element: grid, placement: { mode: "auto" } }),
 		);
 
-		const groupId = generateUUID();
-		["Key point 1", "Key point 2", "Key point 3"].forEach((copy, index) => {
-			const y = -height * 0.18 + index * height * 0.16;
-			const x = -(width / 2 - width * 0.22);
-			const element = buildTextElement({
-				raw: {
-					name: copy,
-					duration: mediaTimeFromSeconds({ seconds: durationSec }),
-					params: {
-						content: copy,
-						fontSize: Math.round(40 * k),
-						fontWeight: "bold",
-						color: "#ffffff",
-						textAlign: "left",
-						"transform.positionX": x,
-						"transform.positionY": y,
-					},
-					motionTemplate: {
-						templateId: "swiss-grid-keypoint",
-						groupId,
-						variables: { text: copy },
-					},
-					linkId: groupId,
-				},
+		// Key points: built from the registered swiss-grid-keypoint template, so
+		// they're correctly sized AND editable in Template Controls. They share a
+		// groupId (restyle together) but no linkId, so each can be dragged to the
+		// moment it's spoken.
+		const keypointTemplate = getMotionTemplate("swiss-grid-keypoint");
+		if (keypointTemplate) {
+			const keypointEls = keypointTemplate.build({
 				startTime: now,
+				durationSec,
+				variables: {},
+				accent,
+				canvasSize,
+				groupId: generateUUID(),
 			});
-			const animations = bakeAnimations({
-				element,
-				channels: fadeSlide({
-					durationSec,
-					baseX: x,
-					baseY: y,
-					fromDx: -50 * k,
-					delaySec: 0.25 + index * 0.18,
-				}),
-			});
-			commands.push(
-				new InsertElementCommand({
-					element: animations ? { ...element, animations } : element,
-					placement: { mode: "auto" },
-				}),
-			);
-		});
+			for (const element of keypointEls) {
+				commands.push(
+					new InsertElementCommand({ element, placement: { mode: "auto" } }),
+				);
+			}
+		}
 
-		if (mainVideo) {
-			const mainTrackId = tracks.main.id;
+		// Reframe the V1 video into the window for THIS segment only — keyframed
+		// so it returns to full-frame at the end (non-destructive: undo reverts,
+		// and the footage is untouched before/after the window). Skipped if the
+		// video already has its own animation, to avoid clobbering it.
+		if (mainVideo && !mainVideo.animations) {
+			const a = (now - mainVideo.startTime) / TICKS_PER_SECOND;
+			const ramp = 0.4;
+			const k4 = (v0: number, v1: number) => [
+				{ atSec: a, value: v0 },
+				{ atSec: a + ramp, value: v1 },
+				{ atSec: a + durationSec - ramp, value: v1 },
+				{ atSec: a + durationSec, value: v0 },
+			];
+			const reframe = bakeAnimations({
+				element: mainVideo,
+				channels: {
+					"transform.scaleX": k4(1, cellScale),
+					"transform.scaleY": k4(1, cellScale),
+					"transform.positionX": k4(0, cellCenterX),
+					"transform.positionY": k4(0, cellCenterY),
+				},
+			});
 			commands.push(
 				new UpdateElementsCommand({
 					updates: [
 						{
-							trackId: mainTrackId,
+							trackId: tracks.main.id,
 							elementId: mainVideo.id,
-							patch: {
-								params: {
-									...mainVideo.params,
-									"transform.scaleX": cellScale,
-									"transform.scaleY": cellScale,
-									"transform.positionX": cellCenterX,
-									"transform.positionY": cellCenterY,
-								},
-							},
+							patch: { animations: reframe },
 						},
 					],
 				}),
@@ -202,8 +184,10 @@ export function MotionTemplatesSection() {
 		editor.command.execute({ command: new BatchCommand(commands) });
 		toast.success("Swiss grid applied", {
 			description: mainVideo
-				? "Your video is scaled into the grid window — adjust crop/scale/position in Effect Controls. Edit the key points like any text."
-				: "No video on V1 to scale — drop footage on the main track, then move it into the window via Effect Controls.",
+				? mainVideo.animations
+					? "Your V1 clip already has animation, so it wasn't reframed — position it into the window manually. Edit the key points like any text; drag each to its moment."
+					: "Your video scales into the window for this 8s segment and returns to full-frame after. Edit the key points; drag each to its moment."
+				: "No video on V1 — drop footage on the main track first. Edit the key points like any text.",
 		});
 	};
 
@@ -213,7 +197,7 @@ export function MotionTemplatesSection() {
 				Motion templates (instant)
 			</p>
 			<div className="grid grid-cols-2 gap-1.5">
-				{MOTION_TEMPLATES.map((template) => (
+				{MOTION_TEMPLATES.filter((t) => !t.internal).map((template) => (
 					<button
 						key={template.id}
 						type="button"
