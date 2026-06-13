@@ -45,7 +45,7 @@ export function findHyperframesPackageDir(): string {
 	);
 }
 
-function resolveHyperframesCli(): string {
+export function resolveHyperframesCli(): string {
 	const pkgDir = findHyperframesPackageDir();
 	const pkg = JSON.parse(
 		readFileSync(path.join(pkgDir, "package.json"), "utf8"),
@@ -69,7 +69,7 @@ function nodeBinary(): string {
 	return isBun ? "node" : process.execPath;
 }
 
-function runNode(args: string[], cwd: string): Promise<{ code: number; output: string }> {
+export function runNode(args: string[], cwd: string): Promise<{ code: number; output: string }> {
 	return new Promise((resolve, reject) => {
 		const child = spawn(nodeBinary(), args, {
 			cwd,

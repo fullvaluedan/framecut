@@ -138,6 +138,12 @@ export interface VideoElement extends BaseTimelineElement {
 		templateId: string;
 		variables: Record<string, string | number | boolean>;
 		groupId: string;
+		/**
+		 * Set when this clip is a baked registry BLOCK (bake library) rather than
+		 * a parametrized template. Holds the registry block name so the properties
+		 * panel offers a re-bake instead of an inapplicable template swap.
+		 */
+		registryBlock?: string;
 	};
 }
 

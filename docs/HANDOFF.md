@@ -3,7 +3,7 @@
 > Read this first in a new session, together with `docs/BRIEF.md` (product brief) and
 > `PATCHES.md` (every upstream file we've modified). This file is the working memory:
 > goals, state, architecture, mistakes, and the rules that keep rounds shipping cleanly.
-> Last updated: 2026-06-13, after round 18 (PR #37).
+> Last updated: 2026-06-13, after round 19 (bake library v1).
 
 ## 1. What this is
 
@@ -90,6 +90,21 @@ work end-to-end, not just that code compiles.*
 - **Export speed:** pure-edit and native-template projects never touch ffmpeg
   (WebCodecs only = CapCut-class). Cinematic burn-ins auto-use hardware H.264
   (nvenc→qsv→amf probe with libx264 fallback) in `/api/media/composite`.
+- **Bake library (R19):** registry **blocks** (maps, charts, social cards, YT
+  lower-third, logo-outro — the rich assets native templates can't reproduce)
+  are now renderable & droppable. A block is a complete standalone HyperFrames
+  composition; `packages/hf-bridge/bake.ts` fetches its registry-item +
+  composition HTML + assets, renders ONCE through the pinned CLI to a transparent
+  WebM, and caches it under `~/.framecut/baked/<name>-<WxH>-<fps>-<hash>/`
+  (content-hash key → registry updates auto-re-bake). `/api/hyperframes/bake`
+  serves it (`x-framecut-cached` header). The HyperFrames panel "Blocks" cards
+  gained an **Add** button → bakes (once, ~render-time; then instant) and drops
+  the clip on an AI overlay lane at the playhead, stamped
+  `framecutAi.registryBlock` so it rides the existing alpha-preview + export-burn
+  path and gets a re-bake properties tab (`RegistryBlockTab`) instead of an
+  inapplicable template swap. Blocks render at NATIVE dims (placed scalable);
+  components/styles are not baked yet (see Queued). Lane placement was extracted
+  to `features/ai-generate/placement.ts` (shared by RUN HYPERFRAMES + bake drop).
 
 ## 4. Architecture map (where things live)
 
@@ -180,10 +195,17 @@ work end-to-end, not just that code compiles.*
 
 ## 7. Queued / next steps (in rough priority)
 
-1. **Bake library** for registry cinematic assets: render each (asset × style accent)
-   once to a cached transparent WebM, then every AI run/gallery drop reuses it —
-   Dan's "pre-bake EVERY HyperFrames element" answered for the assets that can't be
-   native. (Promised as "the path to ALL of them".)
+1. **Bake library — beyond blocks.** R19 shipped the bake path for registry
+   **blocks** (gallery-drop, cached). Still to do for "pre-bake EVERY element":
+   (a) **components** (snippets like grain-overlay, caption styles — need a host
+   comp to render meaningfully; bake them over a placeholder or wire as effects);
+   (b) **examples/styles** (multi-file looks — bigger lift); (c) **AI-run
+   integration** — let the RUN HYPERFRAMES planner pick baked blocks, not just
+   templates (auto-bake on selection); (d) **canvas-fit** — blocks bake at native
+   dims today (a portrait block on a landscape canvas is sized native + scalable);
+   per-canvas re-bake or auto-fit transform would polish placement; (e) **param
+   support** — some blocks expose CSS-var params (e.g. data-chart `--bg-color`);
+   fold a param-set into the cache key for "× style accent" variants.
 2. **Single-clip compound container** (true MOGRT): one timeline chip rendering a
    whole template group. Engine-level; linked-group behavior is the stopgap.
 3. **Embedded Studio preview** for cinematic effects (iframe of `startStudio` 3217)
@@ -198,7 +220,9 @@ work end-to-end, not just that code compiles.*
 
 ## 8. Current state of the test environment
 
-Preview project (ephemeral) has scratch content from round-18 testing. Dan's real
-projects live in his own Chrome profile — untouched by preview-browser resets.
-Self-learning store was cleared after synthetic tests in R12; R18 testing added no
-learning data (no undo-attributed runs).
+Preview project (ephemeral) has scratch content from round-19 testing (a baked
+yt-lower-third + instagram-follow block on an AI overlay lane). Two blocks are
+cached under `~/.framecut/baked/` — safe to keep (the cache is the point). Dan's
+real projects live in his own Chrome profile — untouched by preview-browser resets.
+Self-learning store was cleared after synthetic tests in R12; R18/R19 testing added
+no learning data (no undo-attributed runs; bake drops aren't template placements).
