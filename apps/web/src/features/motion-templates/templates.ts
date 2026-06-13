@@ -64,6 +64,14 @@ export interface MotionTemplate {
 	/** Editable variables shown in the Template Controls panel. */
 	fields: TemplateField[];
 	build: (args: MotionTemplateArgs) => CreateTimelineElement[];
+	/** Hidden from the insert gallery (used internally, e.g. by the Swiss grid). */
+	internal?: boolean;
+	/**
+	 * The built elements are distinct BEATS the user times independently (each
+	 * gets its own startTime, no shared linkId). Template Controls restyles them
+	 * as a group but preserves each beat's own start/duration on rebuild.
+	 */
+	multiPoint?: boolean;
 }
 
 const DARK_PILL = "#0b0d12";
@@ -96,6 +104,18 @@ function canvasScale(
 	return (canvasSize.height / 1080) * scale;
 }
 
+/**
+ * Multiplier for fontSize ONLY. The text renderer already scales fontSize by
+ * canvasHeight/90 (so fontSize is a resolution-relative unit where ~15 is a
+ * normal size — see text/typography.ts), which makes text canvas-proportional
+ * on its own. So fontSize must NOT carry the height/1080 term that positions
+ * do (carrying it double-scales text — quadratically on non-1080 canvases).
+ * It only carries the user's size multiplier.
+ */
+function fontScale(scale = 1): number {
+	return scale;
+}
+
 function buildTemplateText({
 	args,
 	templateId,
@@ -104,6 +124,7 @@ function buildTemplateText({
 	params,
 	channels,
 	hidden,
+	linkPieces = true,
 }: {
 	args: MotionTemplateArgs;
 	templateId: string;
@@ -113,6 +134,12 @@ function buildTemplateText({
 	channels: TemplateChannels;
 	/** Stable-count templates create some elements hidden until used. */
 	hidden?: boolean;
+	/**
+	 * MOGRT behavior (default): the pieces share a linkId so linked selection
+	 * moves/trims them as one clip. Set false for multi-beat templates whose
+	 * pieces should be timed independently (they still share groupId for style).
+	 */
+	linkPieces?: boolean;
 }): CreateTimelineElement {
 	const groupId = args.groupId ?? generateUUID();
 	const base = buildTextElement({
@@ -129,9 +156,7 @@ function buildTemplateText({
 					? { scale: args.scale }
 					: {}),
 			},
-			// MOGRT behavior: every element of one template instance shares a
-			// linkId, so linked selection moves/trims/deletes them as one clip.
-			linkId: groupId,
+			...(linkPieces ? { linkId: groupId } : {}),
 		},
 		startTime: args.startTime,
 	});
@@ -213,7 +238,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "text", "Callout"),
-					fontSize: Math.round(34 * k),
+					fontSize: Math.round(6 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
@@ -250,7 +275,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "text", "TITLE").toUpperCase(),
-					fontSize: Math.round(110 * k),
+					fontSize: Math.round(25 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "color", "#ffffff"),
 					textAlign: "center",
@@ -310,7 +335,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "title", "Name"),
-					fontSize: Math.round(44 * k),
+					fontSize: Math.round(8 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: align === "right" ? "right" : "left",
@@ -331,7 +356,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "subtitle", "Subtitle"),
-					fontSize: Math.round(28 * k),
+					fontSize: Math.round(5 * fontScale(args.scale)),
 					color: "#ffffff",
 					textAlign: align === "right" ? "right" : "left",
 					"transform.positionX": x,
@@ -377,7 +402,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "value", "100%"),
-					fontSize: Math.round(130 * k),
+					fontSize: Math.round(23 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
@@ -392,7 +417,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "label", "Label"),
-					fontSize: Math.round(30 * k),
+					fontSize: Math.round(5 * fontScale(args.scale)),
 					color: "#ffffff",
 					textAlign: "center",
 					"transform.positionY": 110 * k,
@@ -450,7 +475,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "text", "Next chapter"),
-					fontSize: Math.round(64 * k),
+					fontSize: Math.round(11 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: "center",
@@ -480,7 +505,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				hidden: !kicker,
 				params: {
 					content: (kicker || "Kicker").toUpperCase(),
-					fontSize: Math.round(26 * k),
+					fontSize: Math.round(4 * fontScale(args.scale)),
 					color: "#ffffff",
 					textAlign: "center",
 					letterSpacing: 6,
@@ -518,7 +543,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "title", "Big idea"),
-					fontSize: Math.round(84 * k),
+					fontSize: Math.round(14 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "color", "#ffffff"),
 					textAlign: "center",
@@ -538,7 +563,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "subtitle", "the smaller detail"),
-					fontSize: Math.round(34 * k),
+					fontSize: Math.round(6 * fontScale(args.scale)),
 					color: "#ffffffcc",
 					textAlign: "center",
 					"transform.positionY": 48 * k,
@@ -581,7 +606,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: `“${str(args.variables, "quote", "The best way out is always through.")}”`,
-					fontSize: Math.round(56 * k),
+					fontSize: Math.round(9 * fontScale(args.scale)),
 					fontStyle: "italic",
 					color: "#ffffff",
 					textAlign: "center",
@@ -601,7 +626,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: `— ${str(args.variables, "author", "Robert Frost")}`,
-					fontSize: Math.round(28 * k),
+					fontSize: Math.round(5 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: "center",
@@ -645,7 +670,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "handle", "@yourchannel"),
-					fontSize: Math.round(30 * k),
+					fontSize: Math.round(5 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
@@ -705,7 +730,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "text", "Watch time +43%"),
-					fontSize: Math.round(38 * k),
+					fontSize: Math.round(7 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: "center",
@@ -753,7 +778,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 					durationSec: args.durationSec,
 					params: {
 						content: `●  ${text}`,
-						fontSize: Math.round(40 * k),
+						fontSize: Math.round(7 * fontScale(args.scale)),
 						fontWeight: "bold",
 						color: "#ffffff",
 						textAlign: "left",
@@ -804,7 +829,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: `▼ ${str(args.variables, "place", "Tokyo, Japan")}`,
-					fontSize: Math.round(28 * k),
+					fontSize: Math.round(5 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: str(args.variables, "accent", args.accent),
 					textAlign: "center",
@@ -856,7 +881,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 						"text",
 						"Breaking: something big just happened",
 					),
-					fontSize: Math.round(34 * k),
+					fontSize: Math.round(6 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: "center",
@@ -904,7 +929,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "title", "Thanks for watching"),
-					fontSize: Math.round(72 * k),
+					fontSize: Math.round(13 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#ffffff",
 					textAlign: "center",
@@ -919,7 +944,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				durationSec: args.durationSec,
 				params: {
 					content: str(args.variables, "cta", "SUBSCRIBE"),
-					fontSize: Math.round(34 * k),
+					fontSize: Math.round(6 * fontScale(args.scale)),
 					fontWeight: "bold",
 					color: "#0b0d12",
 					textAlign: "center",
@@ -940,6 +965,62 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 				}),
 			});
 			return [title, cta];
+		},
+	},
+	{
+		// Used by the Swiss grid layout (not shown in the insert gallery). Builds
+		// the key-point labels as INDEPENDENT beats (no shared linkId) so each
+		// can be timed to the moment it's spoken, while still restyling together.
+		id: "swiss-grid-keypoint",
+		name: "Swiss key points",
+		description: "Key point labels for the Swiss grid layout",
+		defaultDurationSec: 8,
+		durationRange: { min: 1, max: 30 },
+		internal: true,
+		multiPoint: true,
+		fields: [
+			{ key: "text1", label: "Point 1", type: "text", default: "First point" },
+			{ key: "text2", label: "Point 2", type: "text", default: "Second point" },
+			{ key: "text3", label: "Point 3", type: "text", default: "Third point" },
+			{ key: "accent", label: "Text color", type: "color", default: "#ffffff" },
+		],
+		build: (args) => {
+			const { width, height } = args.canvasSize;
+			const k = canvasScale(args.canvasSize, args.scale);
+			const groupId = args.groupId ?? generateUUID();
+			const color = str(args.variables, "accent", "#ffffff");
+			const texts = [
+				str(args.variables, "text1", "First point"),
+				str(args.variables, "text2", "Second point"),
+				str(args.variables, "text3", "Third point"),
+			];
+			return texts.map((text, index) => {
+				const y = -height * 0.18 + index * height * 0.16;
+				const x = -(width / 2 - width * 0.22);
+				return buildTemplateText({
+					args: { ...args, groupId },
+					templateId: "swiss-grid-keypoint",
+					label: `Key point ${index + 1}`,
+					durationSec: args.durationSec,
+					linkPieces: false,
+					params: {
+						content: text,
+						fontSize: Math.round(7 * fontScale(args.scale)),
+						fontWeight: "bold",
+						color,
+						textAlign: "left",
+						"transform.positionX": x,
+						"transform.positionY": y,
+					},
+					channels: fadeSlide({
+						durationSec: args.durationSec,
+						baseX: x,
+						baseY: y,
+						fromDx: -50 * k,
+						delaySec: 0.25 + index * 0.18,
+					}),
+				});
+			});
 		},
 	},
 ];
