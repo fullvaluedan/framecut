@@ -50,6 +50,22 @@ export async function bakeAndPlaceBlock({
 		res.headers.get("x-framecut-title") ?? name,
 	);
 
+	// Fit the block's native frame inside the canvas so it never overflows
+	// (e.g. a 1080×1920 portrait block on a 1920×1080 canvas comes in at ~0.56×,
+	// centered). Without this the block renders at its intrinsic size.
+	const dims = (res.headers.get("x-framecut-dims") ?? "").split("x");
+	const blockW = Number(dims[0]);
+	const blockH = Number(dims[1]);
+	const { width: canvasW, height: canvasH } = project.settings.canvasSize;
+	const fitParams: Record<string, number> = {};
+	if (blockW > 0 && blockH > 0) {
+		const fit = Math.min(canvasW / blockW, canvasH / blockH);
+		fitParams["transform.scaleX"] = fit;
+		fitParams["transform.scaleY"] = fit;
+		fitParams["transform.positionX"] = 0;
+		fitParams["transform.positionY"] = 0;
+	}
+
 	const blob = await res.blob();
 	const file = new File([blob], `hf-block-${name}.webm`, { type: "video/webm" });
 	const [processed] = await processMediaAssets({ files: [file] });
@@ -80,7 +96,7 @@ export async function bakeAndPlaceBlock({
 			trimEnd: ZERO_MEDIA_TIME,
 			sourceDuration: durationTime,
 			isSourceAudioEnabled: false,
-			params: {},
+			params: fitParams,
 			framecutAi: {
 				compId: bakeKey,
 				templateId: `registry:${name}`,

@@ -24,6 +24,7 @@ import {
 	bakeAnimations,
 	fadeSlide,
 	popIn,
+	resolveEnterExit,
 	type TemplateChannels,
 } from "./keyframes";
 
@@ -39,6 +40,8 @@ export interface MotionTemplateArgs {
 	groupId?: string;
 	/** Prefix names with "AI: " when placed by the planner. */
 	fromAi?: boolean;
+	/** User size multiplier on top of canvas-proportional sizing (default 1). */
+	scale?: number;
 }
 
 /** One editable field surfaced in the Template Controls panel. */
@@ -86,8 +89,11 @@ function str(variables: TemplateVariables, key: string, fallback: string): strin
  * builders is authored against a 1080p frame and multiplied by this, so a
  * 720p or 4K project gets the same visual proportions.
  */
-function canvasScale(canvasSize: { width: number; height: number }): number {
-	return canvasSize.height / 1080;
+function canvasScale(
+	canvasSize: { width: number; height: number },
+	scale = 1,
+): number {
+	return (canvasSize.height / 1080) * scale;
 }
 
 function buildTemplateText({
@@ -119,6 +125,9 @@ function buildTemplateText({
 				templateId,
 				groupId,
 				variables: args.variables,
+				...(args.scale !== undefined && args.scale !== 1
+					? { scale: args.scale }
+					: {}),
 			},
 			// MOGRT behavior: every element of one template instance shares a
 			// linkId, so linked selection moves/trims/deletes them as one clip.
@@ -183,7 +192,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const corner = String(args.variables.corner ?? "top-right");
 			const x = corner.includes("left")
 				? -(width / 2 - 320 * k)
@@ -232,7 +241,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "color", label: "Text color", type: "color", default: "#ffffff" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const channels = popIn({ durationSec: args.durationSec });
 			const element = buildTemplateText({
 				args,
@@ -272,7 +281,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const align = String(args.variables.align ?? "left");
 			const sign = align === "right" ? 1 : -1;
 			const x = sign * (width / 2 - 380 * k);
@@ -350,7 +359,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "accent", label: "Number color", type: "color" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
 			const valueChannels = popIn({ durationSec: args.durationSec });
@@ -410,10 +419,11 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "accent", label: "Bar color", type: "color" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
-			const out = Math.max(0.5, args.durationSec - 0.4);
+			const { enter, exit } = resolveEnterExit(args.durationSec);
+				const out = Math.max(enter + 0.1, args.durationSec - exit);
 			const end = Math.max(out + 0.05, args.durationSec - 0.05);
 			// The pill background growing from zero paddingX reads as a native
 			// grow-from-center wipe (background.paddingX is keyframable and
@@ -421,13 +431,13 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			const mainChannels: TemplateChannels = {
 				opacity: [
 					{ atSec: 0, value: 0 },
-					{ atSec: 0.15, value: 1 },
+					{ atSec: enter * 0.5, value: 1 },
 					{ atSec: out, value: 1 },
 					{ atSec: end, value: 0 },
 				],
 				"background.paddingX": [
 					{ atSec: 0, value: 0 },
-					{ atSec: 0.45, value: Math.round(60 * k) },
+					{ atSec: enter, value: Math.round(60 * k) },
 					{ atSec: out, value: Math.round(60 * k) },
 					{ atSec: end, value: 0 },
 				],
@@ -498,7 +508,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "color", label: "Title color", type: "color", default: "#ffffff" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
 			const title = buildTemplateText({
@@ -561,7 +571,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "accent", label: "Author pill color", type: "color" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
 			const quote = buildTemplateText({
@@ -625,7 +635,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const x = -(width / 2 - 280 * k);
 			const y = height / 2 - 90 * k;
 			const element = buildTemplateText({
@@ -669,20 +679,21 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const y = height / 2 - 150 * k;
-			const out = Math.max(0.6, args.durationSec - 0.4);
+			const { enter, exit } = resolveEnterExit(args.durationSec);
+				const out = Math.max(enter + 0.1, args.durationSec - exit);
 			const end = Math.max(out + 0.05, args.durationSec - 0.05);
 			const channels: TemplateChannels = {
 				opacity: [
 					{ atSec: 0, value: 0 },
-					{ atSec: 0.15, value: 1 },
+					{ atSec: enter * 0.5, value: 1 },
 					{ atSec: out, value: 1 },
 					{ atSec: end, value: 0 },
 				],
 				"background.paddingX": [
 					{ atSec: 0, value: 0 },
-					{ atSec: 0.5, value: Math.round(40 * k) },
+					{ atSec: enter, value: Math.round(40 * k) },
 					{ atSec: out, value: Math.round(40 * k) },
 					{ atSec: end, value: 0 },
 				],
@@ -724,7 +735,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { width } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
 			const x = -(width / 2 - 480 * k);
@@ -783,7 +794,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { width, height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const x = -(width / 2 - 300 * k);
 			const y = -(height / 2 - 90 * k);
 			const element = buildTemplateText({
@@ -832,7 +843,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 		],
 		build: (args) => {
 			const { height } = args.canvasSize;
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const y = height / 2 - 70 * k;
 			const element = buildTemplateText({
 				args,
@@ -883,7 +894,7 @@ export const MOTION_TEMPLATES: MotionTemplate[] = [
 			{ key: "accent", label: "Button color", type: "color" },
 		],
 		build: (args) => {
-			const k = canvasScale(args.canvasSize);
+			const k = canvasScale(args.canvasSize, args.scale);
 			const groupId = args.groupId ?? generateUUID();
 			const shared = { ...args, groupId };
 			const title = buildTemplateText({

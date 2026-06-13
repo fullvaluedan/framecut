@@ -12,8 +12,49 @@ import { useEditor } from "@/editor/use-editor";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import { usePropertiesStore } from "./stores/properties-store";
 import { getPropertiesConfig } from "./registry";
+import { getMotionTemplate } from "@/features/motion-templates/templates";
+import type { TimelineElement, TimelineTrack } from "@/timeline";
 import { cn } from "@/utils/ui";
 import { EmptyView } from "./empty-view";
+
+type ElementWithTrack = { track: TimelineTrack; element: TimelineElement };
+
+/**
+ * A motion template places several text elements that linked-selection grabs
+ * as one (a lower-third's two bars; every keypoint of a layout). When the WHOLE
+ * selection is one such group — every element a text piece sharing one non-empty
+ * `motionTemplate.groupId` of a registered template — return the piece to drive
+ * the panel from, so its Template Controls open instead of the "N selected"
+ * placeholder. Mixed selections (group + other clip, or two groups) → null.
+ */
+function singleTemplateGroupRepresentative(
+	items: ElementWithTrack[],
+): ElementWithTrack | null {
+	if (items.length < 2) return null;
+	let groupId: string | undefined;
+	let templateId: string | undefined;
+	let best: ElementWithTrack | null = null;
+	let bestVars = -1;
+	for (const it of items) {
+		const el = it.element;
+		if (el.type !== "text") return null;
+		const mt = el.motionTemplate;
+		if (!mt?.groupId) return null;
+		if (groupId === undefined) {
+			groupId = mt.groupId;
+			templateId = mt.templateId;
+		} else if (mt.groupId !== groupId) {
+			return null;
+		}
+		const vars = Object.keys(mt.variables ?? {}).length;
+		if (vars > bestVars) {
+			bestVars = vars;
+			best = it;
+		}
+	}
+	if (!templateId || !getMotionTemplate(templateId)) return null;
+	return best;
+}
 
 export function PropertiesPanel() {
 	const editor = useEditor();
@@ -30,7 +71,17 @@ export function PropertiesPanel() {
 		);
 	}
 
-	if (selectedElements.length > 1) {
+	const mediaAssets = editor.media.getAssets();
+
+	const elementsWithTracks = editor.timeline.getElementsWithTracks({
+		elements: selectedElements,
+	});
+
+	// Edit a linked-selected template group via its Template Controls rather
+	// than showing the bare "N selected" placeholder.
+	const groupRep = singleTemplateGroupRepresentative(elementsWithTracks);
+
+	if (selectedElements.length > 1 && !groupRep) {
 		return (
 			<div className="panel bg-background flex h-full flex-col items-center justify-center overflow-hidden rounded-sm border">
 				<p className="text-muted-foreground text-sm">
@@ -40,12 +91,7 @@ export function PropertiesPanel() {
 		);
 	}
 
-	const mediaAssets = editor.media.getAssets();
-
-	const elementsWithTracks = editor.timeline.getElementsWithTracks({
-		elements: selectedElements,
-	});
-	const elementWithTrack = elementsWithTracks[0];
+	const elementWithTrack = groupRep ?? elementsWithTracks[0];
 
 	if (!elementWithTrack) return null;
 
