@@ -109,3 +109,4 @@ All eight patches were authored and build-validated (`bun run build:web` exit 0)
 | `apps/web/src/core/index.ts` | Dev-only `window.__vibeEditor` for console inspection (stripped in production builds) | 2026-06-13 | Gated on NODE_ENV |
 | `apps/web/src/components/editor/panels/properties/stores/properties-store.ts` | Uniform Scale defaults ON (Premiere Motion default) — uncheck to scale H/W independently | 2026-06-13 | One default flip |
 | `apps/web/src/timeline/element-utils.ts` | buildTextElement passes `linkId` through (template groups + linked A/V share the field) | 2026-06-13 | One spread line |
+| `apps/web/src/timeline/types.ts` | Bake library: added optional `framecutAi.registryBlock` (holds the baked registry block name; marks the clip as a baked BLOCK so the properties panel offers re-bake instead of a template swap) | 2026-06-13 | One optional field; all bake logic lives in `features/ai-generate/` + `packages/hf-bridge/bake.ts` |

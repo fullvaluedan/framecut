@@ -4,17 +4,21 @@
  * The HyperFrames asset home (left sidebar tab): every template, style,
  * block, and component in one place — collapsible sections, visual
  * previews, grid/list views, and persisted checkboxes that pick your
- * palette. Template checkboxes gate RUN HYPERFRAMES today; registry picks
- * are the palette for releases that render blocks/components directly.
+ * palette. Template checkboxes gate RUN HYPERFRAMES; blocks have an "Add"
+ * action that bakes them to a cached WebM and drops them on the timeline;
+ * styles/components are saved for releases that render them directly.
  */
 
 import { useEffect, useState } from "react";
 import { describeTemplateCatalog } from "@framecut/hf-bridge/templates";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Spinner } from "@/components/ui/spinner";
 import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
 import { useAiSettingsStore } from "@/features/ai-generate/store";
 import { VIBE_STYLES } from "@/features/ai-generate/styles";
+import { bakeAndPlaceBlock } from "@/features/ai-generate/bake-block";
+import { useEditor } from "@/editor/use-editor";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
 	ArrowDown01Icon,
@@ -47,6 +51,30 @@ interface BrowserItem {
 	demoSrc?: string;
 	previewVideo?: string | null;
 	previewPoster?: string | null;
+	/** Bake library: when present, an "Add" action drops this onto the timeline. */
+	onAdd?: () => void;
+	adding?: boolean;
+}
+
+/** "Add to timeline" button shown on bakeable items (registry blocks). */
+function AddButton({ item }: { item: BrowserItem }) {
+	if (!item.onAdd) return null;
+	return (
+		<Button
+			size="sm"
+			variant="secondary"
+			className="h-6 shrink-0 px-2 text-[0.65rem]"
+			disabled={item.adding}
+			title="Bake this block and drop it on the timeline at the playhead"
+			onClick={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				item.onAdd?.();
+			}}
+		>
+			{item.adding ? <Spinner className="size-3" /> : "Add"}
+		</Button>
+	);
 }
 
 function Section({
@@ -228,6 +256,8 @@ function GridCard({ item }: { item: BrowserItem }) {
 			<div className="flex items-center gap-1.5">
 				<Checkbox checked={item.checked} onCheckedChange={item.onToggle} />
 				<span className="truncate text-xs">{item.title}</span>
+				<span className="ml-auto" />
+				<AddButton item={item} />
 			</div>
 		</label>
 	);
@@ -244,7 +274,7 @@ function ListRow({ item }: { item: BrowserItem }) {
 		>
 			<Checkbox checked={item.checked} onCheckedChange={item.onToggle} />
 			<Preview item={item} className="h-8 w-14 shrink-0" />
-			<div className="min-w-0">
+			<div className="min-w-0 flex-1">
 				<div className="truncate text-xs">{item.title}</div>
 				{item.description && (
 					<div className="text-muted-foreground truncate text-[0.6rem]">
@@ -252,6 +282,7 @@ function ListRow({ item }: { item: BrowserItem }) {
 					</div>
 				)}
 			</div>
+			<AddButton item={item} />
 		</label>
 	);
 }
@@ -392,6 +423,32 @@ export function HyperframesPanel() {
 	const setTemplatesEnabled = useAiSettingsStore((s) => s.setTemplatesEnabled);
 	const setHfAssetsEnabled = useAiSettingsStore((s) => s.setHfAssetsEnabled);
 
+	const editor = useEditor();
+	const [bakingName, setBakingName] = useState<string | null>(null);
+	const addBlock = async (name: string, title: string) => {
+		setBakingName(name);
+		const toastId = toast.loading(`Baking ${title}...`, {
+			description:
+				"First bake renders once on your computer (~10-30s), then it's instant.",
+		});
+		try {
+			const result = await bakeAndPlaceBlock({ editor, name });
+			toast.success(`Added ${result.title}`, {
+				id: toastId,
+				description: result.cached
+					? "Reused the cached bake — instant."
+					: "Baked once and cached — next time is instant.",
+			});
+		} catch (e) {
+			toast.error("Could not add block", {
+				id: toastId,
+				description: e instanceof Error ? e.message : String(e),
+			});
+		} finally {
+			setBakingName(null);
+		}
+	};
+
 	const [registry, setRegistry] = useState<RegistryAsset[]>([]);
 	const [registryError, setRegistryError] = useState<string | null>(null);
 	useEffect(() => {
@@ -436,6 +493,13 @@ export function HyperframesPanel() {
 				previewPoster:
 					a.previewPoster ??
 					(kind === "example" ? `/hf-demos/styles/${a.name}.png` : null),
+				// Blocks are standalone compositions — bakeable & droppable today.
+				...(kind === "block"
+					? {
+							onAdd: () => void addBlock(a.name, a.title),
+							adding: bakingName === a.name,
+						}
+					: {}),
 			}));
 
 	return (
@@ -507,6 +571,7 @@ export function HyperframesPanel() {
 				/>
 				<Section
 					title="Blocks"
+					subtitle="Add → drops on the timeline"
 					items={registryItems("block")}
 					view={view}
 					onSetAll={(enabled) =>
@@ -564,9 +629,10 @@ export function HyperframesPanel() {
 				</div>
 
 				<p className="text-muted-foreground pt-1 text-[0.65rem]">
-					Checked templates are the palette RUN HYPERFRAMES picks from today;
-					checked styles, blocks, and components are saved for releases that
-					render them directly. Claude usage on this device: ~
+					Checked templates are the palette RUN HYPERFRAMES picks from today.
+					Blocks bake once on your computer and drop straight onto the timeline
+					(cached after the first render); styles and components are saved for
+					releases that render them directly. Claude usage on this device: ~
 					{tokensUsedTotal.toLocaleString()} tokens.
 				</p>
 			</div>

@@ -14,4 +14,10 @@ export {
 	startStudio,
 	generatedRoot,
 } from "./renderer";
+export {
+	bakeRegistryBlock,
+	bakedRoot,
+	type BakeJob,
+	type BakeOutcome,
+} from "./bake";
 export { runDoctor, type DoctorReport } from "./doctor";
