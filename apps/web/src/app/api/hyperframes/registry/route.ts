@@ -14,6 +14,9 @@ export interface RegistryAsset {
 	previewVideo: string | null;
 	previewPoster: string | null;
 	durationSec: number | null;
+	/** Registry tags (e.g. "transition", "shader", "data") — used to route each
+	 *  asset to the right mechanism (overlay-droppable vs transition vs effect). */
+	tags: string[];
 }
 
 let cache: { at: number; items: RegistryAsset[] } | null = null;
@@ -36,6 +39,7 @@ async function enrich(item: { name: string; type: string }): Promise<RegistryAss
 		title?: string;
 		description?: string;
 		duration?: number;
+		tags?: string[];
 		preview?: { video?: string; poster?: string };
 	} | null;
 	return {
@@ -46,6 +50,7 @@ async function enrich(item: { name: string; type: string }): Promise<RegistryAss
 		previewVideo: detail?.preview?.video ?? null,
 		previewPoster: detail?.preview?.poster ?? null,
 		durationSec: detail?.duration ?? null,
+		tags: Array.isArray(detail?.tags) ? detail.tags : [],
 	};
 }
 
